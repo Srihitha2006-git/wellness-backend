@@ -1,7 +1,29 @@
-
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { useState } from "react";
 
 export default function Login() {
+  const navigate = useNavigate();
+  const [credentials, setCredentials] = useState({
+    email: "",
+    password: ""
+  });
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    
+    // Get stored role from registration
+    const userRole = localStorage.getItem("userRole");
+    
+    // Role-based navigation
+    if (userRole === "Practitioner") {
+      // Practitioner goes to onboarding first
+      navigate("/practitioner/onboarding");
+    } else {
+      // User goes directly to user dashboard
+      navigate("/user/dashboard");
+    }
+  };
+
   return (
     <div className="min-h-screen flex">
 
@@ -54,7 +76,7 @@ export default function Login() {
             Sign in to access your dashboard
           </p>
 
-          <form className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-6">
 
             <div>
               <label className="block text-sm font-semibold text-gray-600 mb-2">
@@ -63,7 +85,10 @@ export default function Login() {
               <input
                 type="email"
                 placeholder="example@email.com"
+                value={credentials.email}
+                onChange={(e) => setCredentials({...credentials, email: e.target.value})}
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-600 transition"
+                required
               />
             </div>
 
@@ -74,7 +99,10 @@ export default function Login() {
               <input
                 type="password"
                 placeholder="Enter your password"
+                value={credentials.password}
+                onChange={(e) => setCredentials({...credentials, password: e.target.value})}
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-600 transition"
+                required
               />
             </div>
 
@@ -100,7 +128,7 @@ export default function Login() {
           </form>
 
           <p className="text-center text-gray-600 mt-8">
-            Don’t have an account?{" "}
+            Don't have an account?{" "}
             <Link
               to="/register"
               className="text-teal-800 font-semibold hover:underline"

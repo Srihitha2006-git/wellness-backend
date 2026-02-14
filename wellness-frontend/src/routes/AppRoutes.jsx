@@ -1,18 +1,41 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import Login from "../pages/Login";
-import Register from "../pages/Register";
-import Dashboard from "../pages/Dashboard";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
-function AppRoutes() {
+export default function Login() {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const navigate = useNavigate();
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+
+    // Example login logic
+    if (email === "user@example.com" && password === "1234") {
+      // Redirect user to dashboard
+      navigate("/user/dashboard");
+    } else if (email === "practitioner@example.com" && password === "1234") {
+      // Redirect practitioner to their dashboard
+      navigate("/practitioner/dashboard");
+    } else {
+      alert("Invalid credentials");
+    }
+  };
+
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="/dashboard" element={<Dashboard />} />
-      </Routes>
-    </BrowserRouter>
+    <form onSubmit={handleSubmit}>
+      <input
+        type="email"
+        placeholder="Email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+      />
+      <input
+        type="password"
+        placeholder="Password"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+      />
+      <button type="submit">Login</button>
+    </form>
   );
 }
-
-export default AppRoutes;   // ⚠️ THIS LINE IS IMPORTANT

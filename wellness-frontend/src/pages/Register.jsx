@@ -1,6 +1,25 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { useState } from "react";
 
 export default function Register() {
+  const navigate = useNavigate();
+  const [formData, setFormData] = useState({
+    fullName: '',
+    email: '',
+    password: '',
+    role: 'User'
+  });
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    
+    // Save user role to localStorage
+    localStorage.setItem('userRole', formData.role);
+    
+    // Navigate to login after registration
+    navigate('/login');
+  };
+
   return (
     <div className="min-h-screen flex bg-gradient-to-br from-[#f5f3ea] to-[#e7e2d3]">
 
@@ -32,7 +51,7 @@ export default function Register() {
             Start your wellness journey today
           </p>
 
-          <form className="space-y-5">
+          <form className="space-y-5" onSubmit={handleSubmit}>
 
             <div>
               <label className="text-xs font-semibold text-gray-600 tracking-wide">
@@ -42,6 +61,9 @@ export default function Register() {
                 type="text"
                 placeholder="John Doe"
                 className="w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#1f6f66] focus:outline-none"
+                value={formData.fullName}
+                onChange={(e) => setFormData({...formData, fullName: e.target.value})}
+                required
               />
             </div>
 
@@ -53,6 +75,9 @@ export default function Register() {
                 type="email"
                 placeholder="example@email.com"
                 className="w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#1f6f66] focus:outline-none"
+                value={formData.email}
+                onChange={(e) => setFormData({...formData, email: e.target.value})}
+                required
               />
             </div>
 
@@ -64,6 +89,9 @@ export default function Register() {
                 type="password"
                 placeholder="••••••••"
                 className="w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#1f6f66] focus:outline-none"
+                value={formData.password}
+                onChange={(e) => setFormData({...formData, password: e.target.value})}
+                required
               />
             </div>
 
@@ -73,9 +101,11 @@ export default function Register() {
               </label>
               <select
                 className="w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#1f6f66] focus:outline-none"
+                value={formData.role}
+                onChange={(e) => setFormData({...formData, role: e.target.value})}
               >
-                <option>User</option>
-                <option>Practitioner</option>
+                <option value="User">User</option>
+                <option value="Practitioner">Practitioner</option>
               </select>
             </div>
 
