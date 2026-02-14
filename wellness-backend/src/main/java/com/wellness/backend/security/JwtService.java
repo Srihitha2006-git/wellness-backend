@@ -64,4 +64,13 @@ public class JwtService {
     private Key getSignInKey() {
         return Keys.hmacShaKeyFor(SECRET_KEY.getBytes());
     }
+    public String generateRefreshToken(String email) {
+    long refreshExpirationTime = 1000 * 60 * 60 * 24 * 7; // 7 days
+    return Jwts.builder()
+            .setSubject(email)
+            .setIssuedAt(new Date(System.currentTimeMillis()))
+            .setExpiration(new Date(System.currentTimeMillis() + refreshExpirationTime))
+            .signWith(getSignInKey(), SignatureAlgorithm.HS256)
+            .compact();
+}
 }

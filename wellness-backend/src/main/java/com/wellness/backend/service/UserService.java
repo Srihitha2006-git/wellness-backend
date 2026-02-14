@@ -113,7 +113,7 @@ public class UserService {
     }
 
     // ================= ENTITY → DTO =================
-    private UserDTO mapToDTO(User user) {
+    public UserDTO mapToDTO(User user) {
         UserDTO dto = new UserDTO();
         dto.setId(user.getId());
         dto.setName(user.getName());
