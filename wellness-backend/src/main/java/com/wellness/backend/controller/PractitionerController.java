@@ -4,32 +4,37 @@ import com.wellness.backend.dto.PractitionerProfileDTO;
 import com.wellness.backend.dto.PractitionerUpdateDTO;
 import com.wellness.backend.service.PractitionerService;
 import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/practitioners")
-@RequiredArgsConstructor
 public class PractitionerController {
 
     private final PractitionerService practitionerService;
 
-    // ================= GET ALL =================
+    @Autowired
+    public PractitionerController(PractitionerService practitionerService) {
+        this.practitionerService = practitionerService;
+    }
+
+    // ================= GET ALL (PUBLIC) =================
     @GetMapping
     public ResponseEntity<List<PractitionerProfileDTO>> getAllPractitioners() {
         return ResponseEntity.ok(practitionerService.getAllPractitioners());
     }
 
-    // ================= GET VERIFIED =================
+    // ================= GET VERIFIED (PUBLIC) =================
     @GetMapping("/verified")
     public ResponseEntity<List<PractitionerProfileDTO>> getVerifiedPractitioners() {
         return ResponseEntity.ok(practitionerService.getAllVerifiedPractitioners());
     }
 
-    // ================= GET BY ID =================
+    // ================= GET BY ID (PUBLIC) =================
     @GetMapping("/{id}")
     public ResponseEntity<PractitionerProfileDTO> getPractitionerById(
             @PathVariable Integer id) {
@@ -37,7 +42,8 @@ public class PractitionerController {
         return ResponseEntity.ok(practitionerService.getPractitionerById(id));
     }
 
-    // ================= GET BY USER ID =================
+    // ================= GET BY USER ID (PRACTITIONER / ADMIN) =================
+    @PreAuthorize("hasAnyRole('PRACTITIONER','ADMIN')")
     @GetMapping("/user/{userId}")
     public ResponseEntity<PractitionerProfileDTO> getPractitionerByUserId(
             @PathVariable Integer userId) {
@@ -45,7 +51,8 @@ public class PractitionerController {
         return ResponseEntity.ok(practitionerService.getPractitionerByUserId(userId));
     }
 
-    // ================= UPDATE =================
+    // ================= UPDATE PROFILE (PRACTITIONER ONLY) =================
+    @PreAuthorize("hasRole('PRACTITIONER')")
     @PutMapping("/{id}")
     public ResponseEntity<PractitionerProfileDTO> updatePractitionerProfile(
             @PathVariable Integer id,
@@ -55,7 +62,8 @@ public class PractitionerController {
                 practitionerService.updatePractitionerProfile(id, updateDTO));
     }
 
-    // ================= VERIFY (ADMIN ONLY) =================
+    // ================= VERIFY PROFILE (ADMIN ONLY) =================
+    @PreAuthorize("hasRole('ADMIN')")
     @PutMapping("/{id}/verify")
     public ResponseEntity<PractitionerProfileDTO> verifyPractitioner(
             @PathVariable Integer id,
@@ -65,7 +73,8 @@ public class PractitionerController {
                 practitionerService.verifyPractitioner(id, verified));
     }
 
-    // ================= DELETE =================
+    // ================= DELETE PROFILE (ADMIN ONLY) =================
+    @PreAuthorize("hasRole('ADMIN')")
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deletePractitionerProfile(
             @PathVariable Integer id) {
@@ -74,7 +83,7 @@ public class PractitionerController {
         return ResponseEntity.noContent().build();
     }
 
-    // ================= SEARCH =================
+    // ================= SEARCH (PUBLIC) =================
     @GetMapping("/search")
     public ResponseEntity<List<PractitionerProfileDTO>> searchBySpecialization(
             @RequestParam String specialization) {

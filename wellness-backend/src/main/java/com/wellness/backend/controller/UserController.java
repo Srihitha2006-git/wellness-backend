@@ -4,16 +4,20 @@ import com.wellness.backend.dto.UserDTO;
 import com.wellness.backend.dto.UserUpdateDTO;
 import com.wellness.backend.service.UserService;
 import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/users")
-@RequiredArgsConstructor
 public class UserController {
 
     private final UserService userService;
+
+    @Autowired
+    public UserController(UserService userService) {
+        this.userService = userService;
+    }
 
     // ================= GET CURRENT USER =================
     @GetMapping("/me")

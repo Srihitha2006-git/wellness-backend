@@ -19,14 +19,17 @@ public class JwtService {
     private static final long EXPIRATION_TIME = 1000 * 60 * 60; // 1 hour
 
     // 🔹 Generate Token
-    public String generateToken(String email) {
-        return Jwts.builder()
-                .setSubject(email)
-                .setIssuedAt(new Date(System.currentTimeMillis()))
-                .setExpiration(new Date(System.currentTimeMillis() + EXPIRATION_TIME))
-                .signWith(getSignInKey(), SignatureAlgorithm.HS256)
-                .compact();
-    }
+    public String generateToken(String email, String role) {
+
+    return Jwts.builder()
+            .setSubject(email)
+            .claim("role", role)   // 🔥 add this line
+            .setIssuedAt(new Date())
+            .setExpiration(new Date(System.currentTimeMillis() + 1000 * 60 * 60))
+            .signWith(getSignInKey(), SignatureAlgorithm.HS256)
+            .compact();
+}
+
 
     // 🔹 Extract Username
     public String extractUsername(String token) {
@@ -73,4 +76,6 @@ public class JwtService {
             .signWith(getSignInKey(), SignatureAlgorithm.HS256)
             .compact();
 }
+
+
 }

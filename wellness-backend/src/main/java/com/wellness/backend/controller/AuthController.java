@@ -5,16 +5,20 @@ import com.wellness.backend.dto.UserLoginDTO;
 import com.wellness.backend.dto.UserRegisterDTO;
 import com.wellness.backend.service.AuthService;
 import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/auth")
-@RequiredArgsConstructor
 public class AuthController {
 
     private final AuthService authService;
+
+    @Autowired
+    public AuthController(AuthService authService) {
+        this.authService = authService;
+    }
 
     // ================= REGISTER NEW USER =================
     @PostMapping("/register")

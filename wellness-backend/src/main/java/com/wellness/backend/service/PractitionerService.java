@@ -5,7 +5,7 @@ import com.wellness.backend.dto.PractitionerUpdateDTO;
 import com.wellness.backend.model.PractitionerProfile;
 import com.wellness.backend.model.User;
 import com.wellness.backend.repository.PractitionerProfileRepository;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,11 +14,16 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 @Service
-@RequiredArgsConstructor
 public class PractitionerService {
 
     private final PractitionerProfileRepository practitionerRepository;
     private final UserService userService;
+
+    @Autowired
+    public PractitionerService(PractitionerProfileRepository practitionerRepository, UserService userService) {
+        this.practitionerRepository = practitionerRepository;
+        this.userService = userService;
+    }
 
     // ================= GET ALL PRACTITIONERS =================
     @Transactional(readOnly = true)

@@ -7,7 +7,7 @@ import com.wellness.backend.dto.UserDTO;
 import com.wellness.backend.model.User;
 import com.wellness.backend.repository.UserRepository;
 import com.wellness.backend.security.JwtService;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,13 +19,21 @@ import org.springframework.transaction.annotation.Transactional;
  * - Refresh access token
  */
 @Service
-@RequiredArgsConstructor
 public class AuthService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final UserService userService; // For mapping User → UserDTO
+
+    @Autowired
+    public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder,
+                       JwtService jwtService, UserService userService) {
+        this.userRepository = userRepository;
+        this.passwordEncoder = passwordEncoder;
+        this.jwtService = jwtService;
+        this.userService = userService;
+    }
 
     // ================= REGISTER NEW USER =================
     @Transactional
@@ -46,8 +54,8 @@ public class AuthService {
         // Save user
         User savedUser = userRepository.save(user);
 
-        // Generate JWT tokens using email
-        String accessToken = jwtService.generateToken(savedUser.getEmail());
+        // Generate JWT tokens using email and role
+        String accessToken = jwtService.generateToken(savedUser.getEmail(), savedUser.getRole().toString());
         String refreshToken = jwtService.generateRefreshToken(savedUser.getEmail());
 
         // Map Entity → DTO
@@ -74,8 +82,8 @@ public class AuthService {
             throw new RuntimeException("Invalid email or password");
         }
 
-        // Generate JWT tokens using email
-        String accessToken = jwtService.generateToken(user.getEmail());
+        // Generate JWT tokens using email and role
+        String accessToken = jwtService.generateToken(user.getEmail(), user.getRole().toString());
         String refreshToken = jwtService.generateRefreshToken(user.getEmail());
 
         // Map entity → DTO
@@ -105,7 +113,7 @@ public class AuthService {
                 .orElseThrow(() -> new RuntimeException("User not found for token"));
 
         // Generate new access token
-        String newAccessToken = jwtService.generateToken(user.getEmail());
+        String newAccessToken = jwtService.generateToken(user.getEmail(), user.getRole().toString());
 
         // Map entity → DTO
         UserDTO userDTO = userService.mapToDTO(user);
