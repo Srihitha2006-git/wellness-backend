@@ -5,6 +5,7 @@ export default function PractitionerOnboarding() {
   const navigate = useNavigate();
   const [verificationStatus, setVerificationStatus] = useState('pending'); // 'pending' or 'verified'
   const [uploadedFiles, setUploadedFiles] = useState([]);
+  const [errors, setErrors] = useState({});
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
@@ -30,8 +31,40 @@ export default function PractitionerOnboarding() {
   };
 
   const handleVerify = () => {
+    // Check if all required fields are filled
+    const requiredFields = [
+      'fullName',
+      'email',
+      'phone',
+      'licenseNumber',
+      'specialization',
+      'yearsOfExperience',
+      'bio',
+      'qualifications',
+      'clinicAddress',
+      'consultationFee'
+    ];
+
+    const newErrors = {};
+
+    requiredFields.forEach(field => {
+      if (formData[field].toString().trim() === '') {
+        newErrors[field] = 'This field is required';
+      }
+    });
+
+    if (uploadedFiles.length === 0) {
+      newErrors.documents = 'Please upload at least one document';
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      return;
+    }
+
     // Simulate verification process
     setVerificationStatus('verified');
+    setErrors({});
     
     // Store practitioner details in localStorage
     localStorage.setItem('practitionerData', JSON.stringify(formData));
@@ -127,10 +160,16 @@ export default function PractitionerOnboarding() {
                     type="text"
                     placeholder="Dr. John Smith"
                     value={formData.fullName}
-                    onChange={(e) => setFormData({...formData, fullName: e.target.value})}
-                    className="w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#1f6f66] focus:outline-none"
+                    onChange={(e) => {
+                      setFormData({...formData, fullName: e.target.value});
+                      if (errors.fullName) setErrors({...errors, fullName: null});
+                    }}
+                    className={`w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:outline-none ${
+                      errors.fullName ? 'border-red-500 focus:ring-red-500' : 'focus:ring-[#1f6f66]'
+                    }`}
                     required
                   />
+                  {errors.fullName && <p className="text-red-500 text-xs mt-1">{errors.fullName}</p>}
                 </div>
                 
                 <div>
@@ -141,10 +180,16 @@ export default function PractitionerOnboarding() {
                     type="email"
                     placeholder="doctor@example.com"
                     value={formData.email}
-                    onChange={(e) => setFormData({...formData, email: e.target.value})}
-                    className="w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#1f6f66] focus:outline-none"
+                    onChange={(e) => {
+                      setFormData({...formData, email: e.target.value});
+                      if (errors.email) setErrors({...errors, email: null});
+                    }}
+                    className={`w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:outline-none ${
+                      errors.email ? 'border-red-500 focus:ring-red-500' : 'focus:ring-[#1f6f66]'
+                    }`}
                     required
                   />
+                  {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
                 </div>
                 
                 <div>
@@ -155,10 +200,16 @@ export default function PractitionerOnboarding() {
                     type="tel"
                     placeholder="+1 234 567 8900"
                     value={formData.phone}
-                    onChange={(e) => setFormData({...formData, phone: e.target.value})}
-                    className="w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#1f6f66] focus:outline-none"
+                    onChange={(e) => {
+                      setFormData({...formData, phone: e.target.value});
+                      if (errors.phone) setErrors({...errors, phone: null});
+                    }}
+                    className={`w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:outline-none ${
+                      errors.phone ? 'border-red-500 focus:ring-red-500' : 'focus:ring-[#1f6f66]'
+                    }`}
                     required
                   />
+                  {errors.phone && <p className="text-red-500 text-xs mt-1">{errors.phone}</p>}
                 </div>
                 
                 <div>
@@ -169,10 +220,16 @@ export default function PractitionerOnboarding() {
                     type="text"
                     placeholder="LIC-123456"
                     value={formData.licenseNumber}
-                    onChange={(e) => setFormData({...formData, licenseNumber: e.target.value})}
-                    className="w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#1f6f66] focus:outline-none"
+                    onChange={(e) => {
+                      setFormData({...formData, licenseNumber: e.target.value});
+                      if (errors.licenseNumber) setErrors({...errors, licenseNumber: null});
+                    }}
+                    className={`w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:outline-none ${
+                      errors.licenseNumber ? 'border-red-500 focus:ring-red-500' : 'focus:ring-[#1f6f66]'
+                    }`}
                     required
                   />
+                  {errors.licenseNumber && <p className="text-red-500 text-xs mt-1">{errors.licenseNumber}</p>}
                 </div>
               </div>
             </div>
@@ -191,8 +248,13 @@ export default function PractitionerOnboarding() {
                   </label>
                   <select
                     value={formData.specialization}
-                    onChange={(e) => setFormData({...formData, specialization: e.target.value})}
-                    className="w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#1f6f66] focus:outline-none"
+                    onChange={(e) => {
+                      setFormData({...formData, specialization: e.target.value});
+                      if (errors.specialization) setErrors({...errors, specialization: null});
+                    }}
+                    className={`w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:outline-none ${
+                      errors.specialization ? 'border-red-500 focus:ring-red-500' : 'focus:ring-[#1f6f66]'
+                    }`}
                     required
                   >
                     <option value="">Select Specialization</option>
@@ -205,6 +267,7 @@ export default function PractitionerOnboarding() {
                     <option value="Acupuncture">Acupuncture</option>
                     <option value="Herbalism">Herbalism</option>
                   </select>
+                  {errors.specialization && <p className="text-red-500 text-xs mt-1">{errors.specialization}</p>}
                 </div>
                 
                 <div>
@@ -215,10 +278,16 @@ export default function PractitionerOnboarding() {
                     type="number"
                     placeholder="e.g., 5"
                     value={formData.yearsOfExperience}
-                    onChange={(e) => setFormData({...formData, yearsOfExperience: e.target.value})}
-                    className="w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#1f6f66] focus:outline-none"
+                    onChange={(e) => {
+                      setFormData({...formData, yearsOfExperience: e.target.value});
+                      if (errors.yearsOfExperience) setErrors({...errors, yearsOfExperience: null});
+                    }}
+                    className={`w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:outline-none ${
+                      errors.yearsOfExperience ? 'border-red-500 focus:ring-red-500' : 'focus:ring-[#1f6f66]'
+                    }`}
                     required
                   />
+                  {errors.yearsOfExperience && <p className="text-red-500 text-xs mt-1">{errors.yearsOfExperience}</p>}
                 </div>
               </div>
               
@@ -229,11 +298,17 @@ export default function PractitionerOnboarding() {
                 <textarea
                   placeholder="e.g., MBBS, MD (Physiotherapy), Certified Yoga Instructor"
                   value={formData.qualifications}
-                  onChange={(e) => setFormData({...formData, qualifications: e.target.value})}
-                  className="w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#1f6f66] focus:outline-none"
+                  onChange={(e) => {
+                    setFormData({...formData, qualifications: e.target.value});
+                    if (errors.qualifications) setErrors({...errors, qualifications: null});
+                  }}
+                  className={`w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:outline-none ${
+                    errors.qualifications ? 'border-red-500 focus:ring-red-500' : 'focus:ring-[#1f6f66]'
+                  }`}
                   rows="2"
                   required
                 />
+                {errors.qualifications && <p className="text-red-500 text-xs mt-1">{errors.qualifications}</p>}
               </div>
               
               <div>
@@ -243,11 +318,17 @@ export default function PractitionerOnboarding() {
                 <textarea
                   placeholder="Write a brief description about yourself, your expertise, and approach to treatment..."
                   value={formData.bio}
-                  onChange={(e) => setFormData({...formData, bio: e.target.value})}
-                  className="w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#1f6f66] focus:outline-none"
+                  onChange={(e) => {
+                    setFormData({...formData, bio: e.target.value});
+                    if (errors.bio) setErrors({...errors, bio: null});
+                  }}
+                  className={`w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:outline-none ${
+                    errors.bio ? 'border-red-500 focus:ring-red-500' : 'focus:ring-[#1f6f66]'
+                  }`}
                   rows="4"
                   required
                 />
+                {errors.bio && <p className="text-red-500 text-xs mt-1">{errors.bio}</p>}
               </div>
             </div>
 
@@ -265,11 +346,17 @@ export default function PractitionerOnboarding() {
                 <textarea
                   placeholder="Enter your clinic address"
                   value={formData.clinicAddress}
-                  onChange={(e) => setFormData({...formData, clinicAddress: e.target.value})}
-                  className="w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#1f6f66] focus:outline-none"
+                  onChange={(e) => {
+                    setFormData({...formData, clinicAddress: e.target.value});
+                    if (errors.clinicAddress) setErrors({...errors, clinicAddress: null});
+                  }}
+                  className={`w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:outline-none ${
+                    errors.clinicAddress ? 'border-red-500 focus:ring-red-500' : 'focus:ring-[#1f6f66]'
+                  }`}
                   rows="2"
                   required
                 />
+                {errors.clinicAddress && <p className="text-red-500 text-xs mt-1">{errors.clinicAddress}</p>}
               </div>
               
               <div>
@@ -280,10 +367,16 @@ export default function PractitionerOnboarding() {
                   type="number"
                   placeholder="e.g., 75"
                   value={formData.consultationFee}
-                  onChange={(e) => setFormData({...formData, consultationFee: e.target.value})}
-                  className="w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#1f6f66] focus:outline-none"
+                  onChange={(e) => {
+                    setFormData({...formData, consultationFee: e.target.value});
+                    if (errors.consultationFee) setErrors({...errors, consultationFee: null});
+                  }}
+                  className={`w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:outline-none ${
+                    errors.consultationFee ? 'border-red-500 focus:ring-red-500' : 'focus:ring-[#1f6f66]'
+                  }`}
                   required
                 />
+                {errors.consultationFee && <p className="text-red-500 text-xs mt-1">{errors.consultationFee}</p>}
               </div>
             </div>
 
@@ -347,6 +440,7 @@ export default function PractitionerOnboarding() {
                     ))}
                   </div>
                 )}
+                {errors.documents && <p className="text-red-500 text-xs mt-2">{errors.documents}</p>}
               </div>
             </div>
 

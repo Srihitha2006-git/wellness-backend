@@ -7,9 +7,18 @@ export default function Login() {
     email: "",
     password: ""
   });
+  const [error, setError] = useState("");
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    setError("");
+    
+    // Admin credentials
+    if (credentials.email === "admin@wellness.com" && credentials.password === "admin123") {
+      localStorage.setItem("adminLoggedIn", "true");
+      navigate("/admin/dashboard");
+      return;
+    }
     
     // Get stored role from registration
     const userRole = localStorage.getItem("userRole");
@@ -78,6 +87,12 @@ export default function Login() {
 
           <form onSubmit={handleSubmit} className="space-y-6">
 
+            {error && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-red-800 text-sm">
+                {error}
+              </div>
+            )}
+
             <div>
               <label className="block text-sm font-semibold text-gray-600 mb-2">
                 Email
@@ -123,7 +138,7 @@ export default function Login() {
               type="submit"
               className="w-full bg-teal-700 hover:bg-teal-800 text-white py-3 rounded-xl font-semibold shadow-md hover:shadow-lg transition"
             >
-              Sign In
+              login
             </button>
           </form>
 
