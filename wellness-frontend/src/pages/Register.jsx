@@ -7,17 +7,64 @@ export default function Register() {
     fullName: '',
     email: '',
     password: '',
-    role: 'User'
+    role: 'PATIENT'
   });
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    // Save user role to localStorage
-    localStorage.setItem('userRole', formData.role);
-    
-    // Navigate to login after registration
-    navigate('/login');
+    setError("");
+    setLoading(true);
+
+    try {
+      const payload = {
+        name: formData.fullName,
+        email: formData.email,
+        password: formData.password,
+        role: formData.role,
+        bio: ""
+      };
+
+      console.log("Sending registration request:", payload);
+
+      // Call backend API for registration
+      const response = await fetch("http://localhost:8081/api/auth/register", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      console.log("Response status:", response.status);
+      const data = await response.json();
+      console.log("Response data:", data);
+
+      if (!response.ok) {
+        setError(data.message || "Registration failed. Please try again.");
+        setLoading(false);
+        return;
+      }
+
+      // Save registration info
+      localStorage.setItem('user', JSON.stringify(data.user));
+      localStorage.setItem('accessToken', data.accessToken);
+      localStorage.setItem('refreshToken', data.refreshToken);
+      localStorage.setItem('userRole', data.user.role);
+
+      // Navigate to login or role-specific page
+      if (data.user.role === "PRACTITIONER") {
+        navigate("/practitioner/onboarding");
+      } else {
+        navigate("/user/dashboard");
+      }
+    } catch (err) {
+      console.error("Registration error:", err);
+      setError("Network error: " + err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -52,6 +99,12 @@ export default function Register() {
           </p>
 
           <form className="space-y-5" onSubmit={handleSubmit}>
+
+            {error && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-red-800 text-sm">
+                {error}
+              </div>
+            )}
 
             <div>
               <label className="text-xs font-semibold text-gray-600 tracking-wide">
@@ -104,16 +157,17 @@ export default function Register() {
                 value={formData.role}
                 onChange={(e) => setFormData({...formData, role: e.target.value})}
               >
-                <option value="User">User</option>
-                <option value="Practitioner">Practitioner</option>
+                <option value="PATIENT">Patient/User</option>
+                <option value="PRACTITIONER">Practitioner</option>
               </select>
             </div>
 
             <button
               type="submit"
-              className="w-full bg-[#1f6f66] text-white py-3 rounded-lg font-semibold hover:bg-[#155e57] transition duration-300 shadow-md"
+              disabled={loading}
+              className="w-full bg-[#1f6f66] text-white py-3 rounded-lg font-semibold hover:bg-[#155e57] disabled:bg-gray-400 transition duration-300 shadow-md"
             >
-              Register
+              {loading ? "Registering..." : "Register"}
             </button>
           </form>
 

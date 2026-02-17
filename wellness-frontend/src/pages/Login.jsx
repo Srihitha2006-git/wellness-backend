@@ -8,28 +8,61 @@ export default function Login() {
     password: ""
   });
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+    setLoading(true);
     
-    // Admin credentials
-    if (credentials.email === "admin@wellness.com" && credentials.password === "admin123") {
-      localStorage.setItem("adminLoggedIn", "true");
-      navigate("/admin/dashboard");
-      return;
-    }
-    
-    // Get stored role from registration
-    const userRole = localStorage.getItem("userRole");
-    
-    // Role-based navigation
-    if (userRole === "Practitioner") {
-      // Practitioner goes to onboarding first
-      navigate("/practitioner/onboarding");
-    } else {
-      // User goes directly to user dashboard
-      navigate("/user/dashboard");
+    try {
+      const payload = {
+        email: credentials.email,
+        password: credentials.password,
+      };
+
+      console.log("Sending login request:", payload);
+
+      // Call backend API for login
+      const response = await fetch("http://localhost:8081/api/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      console.log("Response status:", response.status);
+      const data = await response.json();
+      console.log("Response data:", data);
+
+      if (!response.ok) {
+        const errorData = data;
+        setError(errorData.message || "Invalid email or password");
+        setLoading(false);
+        return;
+      }
+
+      // Store user data and tokens
+      localStorage.setItem("user", JSON.stringify(data.user));
+      localStorage.setItem("accessToken", data.accessToken);
+      localStorage.setItem("refreshToken", data.refreshToken);
+      localStorage.setItem("userRole", data.user.role);
+
+      // Role-based navigation
+      if (data.user.role === "PRACTITIONER") {
+        navigate("/practitioner/dashboard");
+      } else if (data.user.role === "ADMIN") {
+        localStorage.setItem("adminLoggedIn", "true");
+        navigate("/admin/dashboard");
+      } else {
+        navigate("/user/dashboard");
+      }
+    } catch (err) {
+      console.error("Login error:", err);
+      setError("Network error: " + err.message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -136,9 +169,10 @@ export default function Login() {
 
             <button
               type="submit"
-              className="w-full bg-teal-700 hover:bg-teal-800 text-white py-3 rounded-xl font-semibold shadow-md hover:shadow-lg transition"
+              disabled={loading}
+              className="w-full bg-teal-700 hover:bg-teal-800 disabled:bg-gray-400 text-white py-3 rounded-xl font-semibold shadow-md hover:shadow-lg transition"
             >
-              login
+              {loading ? "Logging in..." : "login"}
             </button>
           </form>
 
