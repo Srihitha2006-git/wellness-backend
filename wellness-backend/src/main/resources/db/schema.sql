@@ -205,4 +205,27 @@ CREATE TABLE answer (
 ) ENGINE=InnoDB;
 
 
+-- 1️⃣2️⃣ PRACTITIONER REQUEST (Requests from patients to practitioners)
+
+DROP TABLE IF EXISTS practitioner_request;
+CREATE TABLE practitioner_request (
+  id INT NOT NULL AUTO_INCREMENT,
+  practitioner_id INT NOT NULL,
+  user_id INT NOT NULL,
+  description TEXT,
+  status ENUM('pending','accepted','rejected','completed','cancelled') DEFAULT 'pending',
+  priority VARCHAR(50) DEFAULT 'normal',
+  requested_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  CONSTRAINT fk_request_practitioner
+    FOREIGN KEY (practitioner_id) REFERENCES practitioner_profile(id)
+    ON DELETE CASCADE,
+  CONSTRAINT fk_request_user
+    FOREIGN KEY (user_id) REFERENCES users(id)
+    ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+
 SET FOREIGN_KEY_CHECKS = 1;

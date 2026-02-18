@@ -1,7 +1,9 @@
 package com.wellness.backend.controller;
 
 import com.wellness.backend.dto.PractitionerProfileDTO;
+import com.wellness.backend.dto.PractitionerCreateDTO;
 import com.wellness.backend.dto.PractitionerUpdateDTO;
+import com.wellness.backend.dto.OnboardingStatusDTO;
 import com.wellness.backend.service.PractitionerService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -34,6 +36,15 @@ public class PractitionerController {
         return ResponseEntity.ok(practitionerService.getAllVerifiedPractitioners());
     }
 
+    // ================= CREATE PROFILE (AUTHENTICATED USERS) =================
+    @PreAuthorize("isAuthenticated()")
+    @PostMapping
+    public ResponseEntity<PractitionerProfileDTO> createPractitionerProfile(
+            @Valid @RequestBody PractitionerCreateDTO createDTO) {
+
+        return ResponseEntity.ok(practitionerService.createPractitionerProfile(createDTO));
+    }
+
     // ================= GET BY ID (PUBLIC) =================
     @GetMapping("/{id}")
     public ResponseEntity<PractitionerProfileDTO> getPractitionerById(
@@ -49,6 +60,13 @@ public class PractitionerController {
             @PathVariable Integer userId) {
 
         return ResponseEntity.ok(practitionerService.getPractitionerByUserId(userId));
+    }
+
+    // ================= CHECK ONBOARDING STATUS (PRACTITIONER) =================
+    @PreAuthorize("hasRole('PRACTITIONER')")
+    @GetMapping("/me/onboarding-status")
+    public ResponseEntity<OnboardingStatusDTO> getOnboardingStatus() {
+        return ResponseEntity.ok(practitionerService.getOnboardingStatus());
     }
 
     // ================= UPDATE PROFILE (PRACTITIONER ONLY) =================

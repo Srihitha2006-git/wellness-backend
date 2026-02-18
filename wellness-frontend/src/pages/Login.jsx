@@ -51,7 +51,39 @@ export default function Login() {
 
       // Role-based navigation
       if (data.user.role === "PRACTITIONER") {
-        navigate("/practitioner/dashboard");
+        // Check if practitioner has completed onboarding
+        try {
+          const onboardingResponse = await fetch(
+            "http://localhost:8081/api/practitioners/me/onboarding-status",
+            {
+              method: "GET",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${data.accessToken}`
+              }
+            }
+          );
+
+          if (onboardingResponse.ok) {
+            const onboardingStatus = await onboardingResponse.json();
+            console.log("Onboarding status:", onboardingStatus);
+
+            // If profile doesn't exist or not verified, go to onboarding
+            if (!onboardingStatus.profileExists || !onboardingStatus.verified) {
+              navigate("/practitioner/onboarding");
+            } else {
+              // Profile exists and verified, go to dashboard
+              navigate("/practitioner/dashboard");
+            }
+          } else {
+            // If status check fails, still go to dashboard (let them access)
+            navigate("/practitioner/dashboard");
+          }
+        } catch (err) {
+          console.error("Error checking onboarding status:", err);
+          // On error, default to dashboard
+          navigate("/practitioner/dashboard");
+        }
       } else if (data.user.role === "ADMIN") {
         localStorage.setItem("adminLoggedIn", "true");
         navigate("/admin/dashboard");

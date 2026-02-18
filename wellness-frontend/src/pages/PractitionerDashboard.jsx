@@ -1,68 +1,76 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 export default function PractitionerDashboard() {
+  const navigate = useNavigate();
   const [activeSection, setActiveSection] = useState('dashboard');
   const [appointmentFilter, setAppointmentFilter] = useState('all');
-  const [practitionerData, setPractitionerData] = useState({
-    name: '',
-    email: '',
-    role: 'practitioner',
-    phone: '',
-    specialization: '',
-    licenseNumber: '',
-    experience: '',
-    address: '',
-    qualifications: '',
-    clinicName: ''
-  });
-  const [isEditing, setIsEditing] = useState(false);
-  const [editData, setEditData] = useState(practitionerData);
-  const [phoneError, setPhoneError] = useState('');
-  const [saveError, setSaveError] = useState('');
-  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Fetch practitioner data from localStorage
-    const practitioners = JSON.parse(localStorage.getItem('mock_practitioners')) || [];
-    const storedPractitioner = JSON.parse(localStorage.getItem('user'));
-    
-    let practitionerEmail = null;
-    
-    if (storedPractitioner && storedPractitioner.email) {
-      practitionerEmail = storedPractitioner.email;
-    } else {
-      const token = localStorage.getItem('authToken');
-      if (token) {
-        const decodedToken = atob(token);
-        practitionerEmail = decodedToken.split(':')[0];
+    // Check if practitioner has completed onboarding
+    const checkOnboardingStatus = async () => {
+      try {
+        const accessToken = localStorage.getItem('accessToken');
+        if (!accessToken) {
+          navigate('/login');
+          return;
+        }
+
+        // Check local verification status first
+        const localVerificationStatus = localStorage.getItem('verificationStatus');
+        if (localVerificationStatus === 'verified') {
+          setLoading(false);
+          return;
+        }
+
+        const response = await fetch(
+          'http://localhost:8081/api/practitioners/me/onboarding-status',
+          {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${accessToken}`
+            }
+          }
+        );
+
+        if (response.ok) {
+          const onboardingStatus = await response.json();
+          console.log('Onboarding status:', onboardingStatus);
+
+          // Only redirect to onboarding if profile doesn't exist
+          // Allow dashboard access even if verification is pending
+          if (!onboardingStatus.profileExists) {
+            navigate('/practitioner/onboarding');
+            return;
+          }
+        } else {
+          // If status check fails, redirect to onboarding
+          navigate('/practitioner/onboarding');
+          return;
+        }
+
+        setLoading(false);
+      } catch (err) {
+        console.error('Error checking onboarding status:', err);
+        navigate('/practitioner/onboarding');
       }
-    }
-    
-    if (practitionerEmail) {
-      let practitioner = practitioners.find(p => p.email === practitionerEmail);
-      
-      if (!practitioner && storedPractitioner) {
-        practitioner = storedPractitioner;
-      }
-      
-      if (practitioner) {
-        const data = {
-          name: practitioner.name || '',
-          email: practitioner.email || '',
-          role: practitioner.role || 'practitioner',
-          phone: practitioner.phone || '',
-          specialization: practitioner.specialization || '',
-          licenseNumber: practitioner.licenseNumber || '',
-          experience: practitioner.experience || '',
-          address: practitioner.address || '',
-          qualifications: practitioner.qualifications || '',
-          clinicName: practitioner.clinicName || ''
-        };
-        setPractitionerData(data);
-        setEditData(data);
-      }
-    }
-  }, []);
+    };
+
+    checkOnboardingStatus();
+  }, [navigate]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#1f6f66] mx-auto mb-4"></div>
+          <p className="text-gray-600 font-semibold">Loading Dashboard...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen bg-gray-50">
@@ -168,18 +176,6 @@ export default function PractitionerDashboard() {
           </button>
 
           <button
-            onClick={() => setActiveSection('profile')}
-            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-all duration-200 ${
-              activeSection === 'profile'
-                ? 'text-white bg-green-500/15 border-l-4 border-green-500'
-                : 'text-slate-300 hover:bg-white/5'
-            }`}
-          >
-            <span>👤</span>
-            <span>Profile</span>
-          </button>
-
-          <button
             onClick={() => setActiveSection('settings')}
             className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-all duration-200 ${
               activeSection === 'settings'
@@ -189,18 +185,6 @@ export default function PractitionerDashboard() {
           >
             <span>⚙️</span>
             <span>Settings</span>
-          </button>
-
-          <button
-            onClick={() => {
-              localStorage.removeItem('authToken');
-              localStorage.removeItem('user');
-              window.location.href = '/login';
-            }}
-            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-all duration-200 text-slate-300 hover:bg-red-500/10 hover:text-red-400`}
-          >
-            <span>🚪</span>
-            <span>Logout</span>
           </button>
         </nav>
       </div>
@@ -653,250 +637,6 @@ export default function PractitionerDashboard() {
                 <div className="text-6xl mb-4">💬</div>
                 <h3 className="text-xl font-semibold text-slate-900 mb-2">No messages yet</h3>
                 <p className="text-slate-600 text-sm">Your conversations with patients will appear here</p>
-              </div>
-            </div>
-          </>
-        )}
-
-        {/* Profile Section */}
-        {activeSection === 'profile' && (
-          <>
-            <div className="mb-8 flex justify-between items-center">
-              <div>
-                <h2 className="text-3xl font-bold text-slate-900">My Profile</h2>
-                <p className="text-slate-600 text-sm mt-2">View and manage your professional information</p>
-              </div>
-              <button
-                onClick={() => {
-                  setIsEditing(!isEditing);
-                  if (isEditing) {
-                    setEditData(practitionerData);
-                  }
-                }}
-                className={`px-6 py-2.5 rounded-lg font-semibold transition-all ${isEditing
-                  ? 'bg-slate-300 text-slate-700 hover:bg-slate-400'
-                  : 'bg-green-500 text-white hover:bg-green-600'
-                  }`}
-              >
-                {isEditing ? 'Cancel' : 'Edit Profile'}
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Profile Avatar Card */}
-              <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 flex flex-col items-center text-center">
-                <div className="w-24 h-24 bg-gradient-to-br from-green-500 to-green-600 rounded-full flex items-center justify-center text-white text-4xl mb-4 font-bold">
-                  {practitionerData.name ? practitionerData.name.split(' ').map(n => n[0]).join('') : 'P'}
-                </div>
-                <h3 className="text-xl font-bold text-slate-900 mb-1">{practitionerData.name || 'Practitioner'}</h3>
-                <p className="text-slate-600 text-sm mb-2">{practitionerData.email}</p>
-                <p className="text-green-600 text-sm font-semibold mb-4">{practitionerData.specialization || 'Not specified'}</p>
-                <div className="w-full pt-4 border-t border-slate-200">
-                  <span className="inline-block px-4 py-1.5 bg-green-100 text-green-800 rounded-full text-xs font-semibold uppercase">
-                    {practitionerData.role}
-                  </span>
-                </div>
-              </div>
-
-              {/* Profile Information */}
-              <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm p-8">
-                {!isEditing ? (
-                  <div className="space-y-6">
-                    <div>
-                      <h4 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-1">Full Name</h4>
-                      <p className="text-lg text-slate-900 font-medium">{practitionerData.name || 'Not provided'}</p>
-                    </div>
-                    <div className="border-t border-slate-200 pt-6">
-                      <h4 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-1">Email Address</h4>
-                      <p className="text-lg text-slate-900 font-medium">{practitionerData.email || 'Not provided'}</p>
-                    </div>
-                    <div className="border-t border-slate-200 pt-6">
-                      <h4 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-1">Phone Number</h4>
-                      <p className="text-lg text-slate-900 font-medium">{practitionerData.phone || 'Not provided'}</p>
-                    </div>
-                    <div className="border-t border-slate-200 pt-6">
-                      <h4 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-1">Specialization</h4>
-                      <p className="text-lg text-slate-900 font-medium">{practitionerData.specialization || 'Not provided'}</p>
-                    </div>
-                    <div className="border-t border-slate-200 pt-6">
-                      <h4 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-1">License Number</h4>
-                      <p className="text-lg text-slate-900 font-medium">{practitionerData.licenseNumber || 'Not provided'}</p>
-                    </div>
-                    <div className="border-t border-slate-200 pt-6">
-                      <h4 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-1">Experience (Years)</h4>
-                      <p className="text-lg text-slate-900 font-medium">{practitionerData.experience || 'Not provided'}</p>
-                    </div>
-                    <div className="border-t border-slate-200 pt-6">
-                      <h4 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-1">Clinic Name</h4>
-                      <p className="text-lg text-slate-900 font-medium">{practitionerData.clinicName || 'Not provided'}</p>
-                    </div>
-                    <div className="border-t border-slate-200 pt-6">
-                      <h4 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-1">Address</h4>
-                      <p className="text-lg text-slate-900 font-medium">{practitionerData.address || 'Not provided'}</p>
-                    </div>
-                    <div className="border-t border-slate-200 pt-6">
-                      <h4 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-1">Qualifications</h4>
-                      <p className="text-lg text-slate-900 font-medium">{practitionerData.qualifications || 'Not provided'}</p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-5">
-                    {saveError && (
-                      <div className="p-4 bg-red-50 border border-red-300 rounded-lg">
-                        <p className="text-red-800 text-sm font-medium">{saveError}</p>
-                      </div>
-                    )}
-                    {saveSuccess && (
-                      <div className="p-4 bg-green-50 border border-green-300 rounded-lg">
-                        <p className="text-green-800 text-sm font-medium">✓ Profile updated successfully!</p>
-                      </div>
-                    )}
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-2">Full Name</label>
-                      <input
-                        type="text"
-                        value={editData.name}
-                        onChange={(e) => setEditData({ ...editData, name: e.target.value })}
-                        className="w-full px-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-2">Email Address</label>
-                      <input
-                        type="email"
-                        value={editData.email}
-                        disabled
-                        className="w-full px-4 py-2.5 border border-slate-300 rounded-lg text-sm bg-slate-50 text-slate-500 cursor-not-allowed"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-2">Phone Number</label>
-                      <input
-                        type="tel"
-                        value={editData.phone}
-                        onChange={(e) => {
-                          const value = e.target.value.replace(/\D/g, '');
-                          setEditData({ ...editData, phone: value });
-                          if (value.length > 0 && value.length !== 10) {
-                            setPhoneError('Phone number must be exactly 10 digits');
-                          } else {
-                            setPhoneError('');
-                          }
-                        }}
-                        className={`w-full px-4 py-2.5 border rounded-lg text-sm focus:outline-none focus:ring-2 ${phoneError
-                          ? 'border-red-500 focus:ring-red-500'
-                          : 'border-slate-300 focus:ring-green-500'
-                          }`}
-                        placeholder="Enter 10-digit phone number"
-                        maxLength="10"
-                      />
-                      {phoneError && <p className="text-red-600 text-xs mt-1">{phoneError}</p>}
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-2">Specialization</label>
-                      <input
-                        type="text"
-                        value={editData.specialization}
-                        onChange={(e) => setEditData({ ...editData, specialization: e.target.value })}
-                        className="w-full px-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-                        placeholder="e.g., Ayurveda, Physiotherapy"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-2">License Number</label>
-                      <input
-                        type="text"
-                        value={editData.licenseNumber}
-                        onChange={(e) => setEditData({ ...editData, licenseNumber: e.target.value })}
-                        className="w-full px-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-                        placeholder="e.g., LIC-12345"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-2">Experience (Years)</label>
-                      <input
-                        type="number"
-                        value={editData.experience}
-                        onChange={(e) => setEditData({ ...editData, experience: e.target.value })}
-                        className="w-full px-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-                        placeholder="e.g., 5"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-2">Clinic Name</label>
-                      <input
-                        type="text"
-                        value={editData.clinicName}
-                        onChange={(e) => setEditData({ ...editData, clinicName: e.target.value })}
-                        className="w-full px-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-                        placeholder="e.g., Wellness Clinic"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-2">Address</label>
-                      <textarea
-                        value={editData.address}
-                        onChange={(e) => setEditData({ ...editData, address: e.target.value })}
-                        className="w-full px-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 min-h-[80px] resize-none"
-                        placeholder="Enter your clinic address"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-2">Qualifications</label>
-                      <textarea
-                        value={editData.qualifications}
-                        onChange={(e) => setEditData({ ...editData, qualifications: e.target.value })}
-                        className="w-full px-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 min-h-[80px] resize-none"
-                        placeholder="Enter your qualifications and certifications"
-                      />
-                    </div>
-                    <div className="flex gap-3 pt-4 border-t border-slate-200">
-                      <button
-                        onClick={() => {
-                          if (editData.phone && editData.phone.length !== 10) {
-                            setPhoneError('Phone number must be exactly 10 digits');
-                            setSaveError('Please fix the errors before saving');
-                            return;
-                          }
-                          setPractitionerData(editData);
-                          setIsEditing(false);
-                          setPhoneError('');
-                          setSaveError('');
-                          setSaveSuccess(true);
-                          
-                          const storedPractitioner = JSON.parse(localStorage.getItem('user')) || {};
-                          const updatedPractitioner = { ...storedPractitioner, ...editData };
-                          localStorage.setItem('user', JSON.stringify(updatedPractitioner));
-                          
-                          const practitioners = JSON.parse(localStorage.getItem('mock_practitioners')) || [];
-                          const practIndex = practitioners.findIndex(p => p.email === editData.email);
-                          if (practIndex !== -1) {
-                            practitioners[practIndex] = { ...practitioners[practIndex], ...editData };
-                          } else {
-                            practitioners.push(editData);
-                          }
-                          localStorage.setItem('mock_practitioners', JSON.stringify(practitioners));
-                          
-                          setTimeout(() => setSaveSuccess(false), 3000);
-                        }}
-                        className="flex-1 px-4 py-2.5 bg-green-500 text-white rounded-lg font-semibold hover:bg-green-600 transition-all"
-                      >
-                        Save Changes
-                      </button>
-                      <button
-                        onClick={() => {
-                          setEditData(practitionerData);
-                          setIsEditing(false);
-                          setPhoneError('');
-                          setSaveError('');
-                        }}
-                        className="flex-1 px-4 py-2.5 bg-slate-200 text-slate-700 rounded-lg font-semibold hover:bg-slate-300 transition-all"
-                      >
-                        Discard
-                      </button>
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
           </>
