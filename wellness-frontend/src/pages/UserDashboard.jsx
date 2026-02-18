@@ -1,9 +1,71 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 export default function UserDashboard() {
+  const navigate = useNavigate();
   const [activeSection, setActiveSection] = useState('dashboard');
   const [sessionFilter, setSessionFilter] = useState('all');
   const [orderFilter, setOrderFilter] = useState('all');
+  const [userData, setUserData] = useState({
+    name: '',
+    email: '',
+    role: 'user',
+    phone: '',
+    dateOfBirth: '',
+    address: '',
+    medicalHistory: '',
+    emergencyContact: ''
+  });
+  const [isEditing, setIsEditing] = useState(false);
+  const [editData, setEditData] = useState(userData);
+  const [phoneError, setPhoneError] = useState('');
+  const [saveError, setSaveError] = useState('');
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
+  useEffect(() => {
+    // Fetch user data from localStorage
+    const users = JSON.parse(localStorage.getItem('mock_users')) || [];
+    const storedUser = JSON.parse(localStorage.getItem('user'));
+    
+    // Try to get user email from stored user object or from the backend response
+    let userEmail = null;
+    
+    if (storedUser && storedUser.email) {
+      userEmail = storedUser.email;
+    } else {
+      // Fallback: try to decode token if available
+      const token = localStorage.getItem('authToken');
+      if (token) {
+        const decodedToken = atob(token);
+        userEmail = decodedToken.split(':')[0];
+      }
+    }
+    
+    if (userEmail) {
+      // Find user by email in mock_users
+      let user = users.find(u => u.email === userEmail);
+      
+      // If not found in mock_users but we have storedUser, use storedUser data
+      if (!user && storedUser) {
+        user = storedUser;
+      }
+      
+      if (user) {
+        const userData = {
+          name: user.name || '',
+          email: user.email || '',
+          role: user.role || 'user',
+          phone: user.phone || '',
+          dateOfBirth: user.dateOfBirth || '',
+          address: user.address || '',
+          medicalHistory: user.medicalHistory || '',
+          emergencyContact: user.emergencyContact || ''
+        };
+        setUserData(userData);
+        setEditData(userData);
+      }
+    }
+  }, []);
 
   return (
     <div className="flex min-h-screen bg-gray-50">
@@ -86,6 +148,17 @@ export default function UserDashboard() {
           </button>
 
           <button
+            onClick={() => setActiveSection('profile')}
+            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-all duration-200 ${activeSection === 'profile'
+                ? 'text-white bg-green-500/15 border-l-4 border-green-500'
+                : 'text-slate-300 hover:bg-white/5'
+              }`}
+          >
+            <span>👤</span>
+            <span>Profile</span>
+          </button>
+
+          <button
             onClick={() => setActiveSection('settings')}
             className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-all duration-200 ${activeSection === 'settings'
                 ? 'text-white bg-green-500/15 border-l-4 border-green-500'
@@ -95,6 +168,26 @@ export default function UserDashboard() {
             <span>⚙️</span>
             <span>Settings</span>
           </button>
+
+          <div className="mt-8 pt-6 border-t border-white/10">
+            <button
+              onClick={() => {
+                // Clear all authentication data
+                localStorage.removeItem('user');
+                localStorage.removeItem('authToken');
+                localStorage.removeItem('accessToken');
+                localStorage.removeItem('refreshToken');
+                localStorage.removeItem('userRole');
+                localStorage.removeItem('adminLoggedIn');
+                // Redirect to login page
+                navigate('/login');
+              }}
+              className="w-full flex items-center gap-3 px-6 py-3 text-left transition-all duration-200 text-slate-300 hover:bg-red-500/20 hover:text-red-300 rounded-lg"
+            >
+              <span>🚪</span>
+              <span>Logout</span>
+            </button>
+          </div>
         </nav>
       </div>
 
@@ -573,6 +666,224 @@ export default function UserDashboard() {
                 <div className="text-6xl mb-4">💬</div>
                 <h3 className="text-xl font-semibold text-slate-900 mb-2">No messages yet</h3>
                 <p className="text-slate-600 text-sm">Your conversations with practitioners will appear here</p>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Profile Section */}
+        {activeSection === 'profile' && (
+          <>
+            <div className="mb-8 flex justify-between items-center">
+              <div>
+                <h2 className="text-3xl font-bold text-slate-900">My Profile</h2>
+                <p className="text-slate-600 text-sm mt-2">View and manage your personal information</p>
+              </div>
+              <button
+                onClick={() => {
+                  setIsEditing(!isEditing);
+                  if (isEditing) {
+                    setEditData(userData);
+                  }
+                }}
+                className={`px-6 py-2.5 rounded-lg font-semibold transition-all ${isEditing
+                  ? 'bg-slate-300 text-slate-700 hover:bg-slate-400'
+                  : 'bg-green-500 text-white hover:bg-green-600'
+                  }`}
+              >
+                {isEditing ? 'Cancel' : 'Edit Profile'}
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Profile Avatar Card */}
+              <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 flex flex-col items-center text-center">
+                <div className="w-24 h-24 bg-gradient-to-br from-green-500 to-green-600 rounded-full flex items-center justify-center text-white text-4xl mb-4 font-bold">
+                  {userData.name ? userData.name.split(' ').map(n => n[0]).join('') : 'U'}
+                </div>
+                <h3 className="text-xl font-bold text-slate-900 mb-1">{userData.name || 'User'}</h3>
+                <p className="text-slate-600 text-sm mb-4">{userData.email}</p>
+                <div className="w-full pt-4 border-t border-slate-200">
+                  <span className="inline-block px-4 py-1.5 bg-green-100 text-green-800 rounded-full text-xs font-semibold uppercase">
+                    {userData.role}
+                  </span>
+                </div>
+              </div>
+
+              {/* Profile Information */}
+              <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm p-8">
+                {!isEditing ? (
+                  <div className="space-y-6">
+                    <div>
+                      <h4 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-1">Full Name</h4>
+                      <p className="text-lg text-slate-900 font-medium">{userData.name || 'Not provided'}</p>
+                    </div>
+                    <div className="border-t border-slate-200 pt-6">
+                      <h4 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-1">Email Address</h4>
+                      <p className="text-lg text-slate-900 font-medium">{userData.email || 'Not provided'}</p>
+                    </div>
+                    <div className="border-t border-slate-200 pt-6">
+                      <h4 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-1">Phone Number</h4>
+                      <p className="text-lg text-slate-900 font-medium">{userData.phone || 'Not provided'}</p>
+                    </div>
+                    <div className="border-t border-slate-200 pt-6">
+                      <h4 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-1">Date of Birth</h4>
+                      <p className="text-lg text-slate-900 font-medium">{userData.dateOfBirth || 'Not provided'}</p>
+                    </div>
+                    <div className="border-t border-slate-200 pt-6">
+                      <h4 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-1">Address</h4>
+                      <p className="text-lg text-slate-900 font-medium">{userData.address || 'Not provided'}</p>
+                    </div>
+                    <div className="border-t border-slate-200 pt-6">
+                      <h4 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-1">Medical History</h4>
+                      <p className="text-lg text-slate-900 font-medium">{userData.medicalHistory || 'Not provided'}</p>
+                    </div>
+                    <div className="border-t border-slate-200 pt-6">
+                      <h4 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-1">Emergency Contact</h4>
+                      <p className="text-lg text-slate-900 font-medium">{userData.emergencyContact || 'Not provided'}</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-5">
+                    {saveError && (
+                      <div className="p-4 bg-red-50 border border-red-300 rounded-lg">
+                        <p className="text-red-800 text-sm font-medium">{saveError}</p>
+                      </div>
+                    )}
+                    {saveSuccess && (
+                      <div className="p-4 bg-green-50 border border-green-300 rounded-lg">
+                        <p className="text-green-800 text-sm font-medium">✓ Profile updated successfully!</p>
+                      </div>
+                    )}
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-2">Full Name</label>
+                      <input
+                        type="text"
+                        value={editData.name}
+                        onChange={(e) => setEditData({ ...editData, name: e.target.value })}
+                        className="w-full px-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-2">Email Address</label>
+                      <input
+                        type="email"
+                        value={editData.email}
+                        disabled
+                        className="w-full px-4 py-2.5 border border-slate-300 rounded-lg text-sm bg-slate-50 text-slate-500 cursor-not-allowed"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-2">Phone Number</label>
+                      <input
+                        type="tel"
+                        value={editData.phone}
+                        onChange={(e) => {
+                          const value = e.target.value.replace(/\D/g, '');
+                          setEditData({ ...editData, phone: value });
+                          if (value.length > 0 && value.length !== 10) {
+                            setPhoneError('Phone number must be exactly 10 digits');
+                          } else {
+                            setPhoneError('');
+                          }
+                        }}
+                        className={`w-full px-4 py-2.5 border rounded-lg text-sm focus:outline-none focus:ring-2 ${phoneError
+                          ? 'border-red-500 focus:ring-red-500'
+                          : 'border-slate-300 focus:ring-green-500'
+                          }`}
+                        placeholder="Enter 10-digit phone number"
+                        maxLength="10"
+                      />
+                      {phoneError && <p className="text-red-600 text-xs mt-1">{phoneError}</p>}
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-2">Date of Birth</label>
+                      <input
+                        type="date"
+                        value={editData.dateOfBirth}
+                        onChange={(e) => setEditData({ ...editData, dateOfBirth: e.target.value })}
+                        className="w-full px-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-2">Address</label>
+                      <textarea
+                        value={editData.address}
+                        onChange={(e) => setEditData({ ...editData, address: e.target.value })}
+                        className="w-full px-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 min-h-[80px] resize-none"
+                        placeholder="Enter your address"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-2">Medical History</label>
+                      <textarea
+                        value={editData.medicalHistory}
+                        onChange={(e) => setEditData({ ...editData, medicalHistory: e.target.value })}
+                        className="w-full px-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 min-h-[80px] resize-none"
+                        placeholder="Enter any relevant medical history"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-700 mb-2">Emergency Contact</label>
+                      <input
+                        type="text"
+                        value={editData.emergencyContact}
+                        onChange={(e) => setEditData({ ...editData, emergencyContact: e.target.value })}
+                        className="w-full px-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                        placeholder="Enter emergency contact name/number"
+                      />
+                    </div>
+                    <div className="flex gap-3 pt-4 border-t border-slate-200">
+                      <button
+                        onClick={() => {
+                          // Validate phone number
+                          if (editData.phone && editData.phone.length !== 10) {
+                            setPhoneError('Phone number must be exactly 10 digits');
+                            setSaveError('Please fix the errors before saving');
+                            return;
+                          }
+                          setUserData(editData);
+                          setIsEditing(false);
+                          setPhoneError('');
+                          setSaveError('');
+                          setSaveSuccess(true);
+                          
+                          // Save to localStorage - Update both "user" and "mock_users"
+                          const storedUser = JSON.parse(localStorage.getItem('user')) || {};
+                          const updatedUser = { ...storedUser, ...editData };
+                          localStorage.setItem('user', JSON.stringify(updatedUser));
+                          
+                          // Also update mock_users for compatibility
+                          const users = JSON.parse(localStorage.getItem('mock_users')) || [];
+                          const userIndex = users.findIndex(u => u.email === editData.email);
+                          if (userIndex !== -1) {
+                            users[userIndex] = { ...users[userIndex], ...editData };
+                          } else {
+                            users.push(editData);
+                          }
+                          localStorage.setItem('mock_users', JSON.stringify(users));
+                          
+                          // Clear success message after 3 seconds
+                          setTimeout(() => setSaveSuccess(false), 3000);
+                        }}
+                        className="flex-1 px-4 py-2.5 bg-green-500 text-white rounded-lg font-semibold hover:bg-green-600 transition-all"
+                      >
+                        Save Changes
+                      </button>
+                      <button
+                        onClick={() => {
+                          setEditData(userData);
+                          setIsEditing(false);
+                          setPhoneError('');
+                          setSaveError('');
+                        }}
+                        className="flex-1 px-4 py-2.5 bg-slate-200 text-slate-700 rounded-lg font-semibold hover:bg-slate-300 transition-all"
+                      >
+                        Discard
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </>
