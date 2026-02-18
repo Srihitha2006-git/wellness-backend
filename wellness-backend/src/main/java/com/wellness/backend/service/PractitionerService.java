@@ -7,6 +7,8 @@ import com.wellness.backend.dto.OnboardingStatusDTO;
 import com.wellness.backend.model.PractitionerProfile;
 import com.wellness.backend.model.User;
 import com.wellness.backend.repository.PractitionerProfileRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -19,13 +21,19 @@ import java.util.stream.Collectors;
 @Service
 public class PractitionerService {
 
+    private static final Logger logger = LoggerFactory.getLogger(PractitionerService.class);
+
     private final PractitionerProfileRepository practitionerRepository;
     private final UserService userService;
+    private final EmailService emailService;
 
     @Autowired
-    public PractitionerService(PractitionerProfileRepository practitionerRepository, UserService userService) {
+    public PractitionerService(PractitionerProfileRepository practitionerRepository,
+            UserService userService,
+            EmailService emailService) {
         this.practitionerRepository = practitionerRepository;
         this.userService = userService;
+        this.emailService = emailService;
     }
 
     // ================= GET ALL PRACTITIONERS =================
@@ -138,7 +146,21 @@ public class PractitionerService {
 
         profile.setVerified(verified);
 
-        return mapToDTO(practitionerRepository.save(profile));
+        PractitionerProfile savedProfile = practitionerRepository.save(profile);
+
+        // Send approval email when practitioner is verified
+        if (Boolean.TRUE.equals(verified)) {
+            try {
+                emailService.sendPractitionerVerifiedEmail(
+                        profile.getUser().getName(),
+                        profile.getUser().getEmail());
+            } catch (Exception e) {
+                logger.error("Verification email failed for practitioner {}: {}",
+                        profile.getUser().getEmail(), e.getMessage());
+            }
+        }
+
+        return mapToDTO(savedProfile);
     }
 
     // ================= DELETE PRACTITIONER PROFILE =================
