@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const API_BASE_URL = "http://localhost:8081/api/practitioners/requests";
+const API_BASE_URL = "/api/practitioners/requests";
 
 // Get all requests for admin (latest first)
 export const getAllRequests = async () => {
@@ -9,7 +9,7 @@ export const getAllRequests = async () => {
       `${API_BASE_URL}/all`,
       {
         headers: {
-          Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+          Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
           "Content-Type": "application/json",
         },
       }
@@ -28,7 +28,7 @@ export const getRequestsForPractitioner = async (practitionerId) => {
       `${API_BASE_URL}/practitioner/${practitionerId}`,
       {
         headers: {
-          Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+          Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
           "Content-Type": "application/json",
         },
       }
@@ -47,7 +47,7 @@ export const getPendingRequests = async (practitionerId) => {
       `${API_BASE_URL}/practitioner/${practitionerId}/pending`,
       {
         headers: {
-          Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+          Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
           "Content-Type": "application/json",
         },
       }
@@ -67,7 +67,7 @@ export const getRequestsByStatus = async (practitionerId, status) => {
       {
         params: { status },
         headers: {
-          Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+          Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
           "Content-Type": "application/json",
         },
       }
@@ -87,7 +87,7 @@ export const getRequestsByPriority = async (practitionerId, priority) => {
       {
         params: { priority },
         headers: {
-          Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+          Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
           "Content-Type": "application/json",
         },
       }
@@ -104,7 +104,7 @@ export const getRequestById = async (requestId) => {
   try {
     const response = await axios.get(`${API_BASE_URL}/${requestId}`, {
       headers: {
-        Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+        Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
         "Content-Type": "application/json",
       },
     });
@@ -123,7 +123,7 @@ export const acceptRequest = async (requestId) => {
       {},
       {
         headers: {
-          Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+          Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
           "Content-Type": "application/json",
         },
       }
@@ -144,7 +144,7 @@ export const rejectRequest = async (requestId, reason) => {
       {
         params: { reason },
         headers: {
-          Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+          Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
           "Content-Type": "application/json",
         },
       }
@@ -164,7 +164,7 @@ export const completeRequest = async (requestId) => {
       {},
       {
         headers: {
-          Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+          Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
           "Content-Type": "application/json",
         },
       }
@@ -184,7 +184,7 @@ export const cancelRequest = async (requestId) => {
       {},
       {
         headers: {
-          Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+          Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
           "Content-Type": "application/json",
         },
       }
@@ -203,7 +203,7 @@ export const countPendingRequests = async (practitionerId) => {
       `${API_BASE_URL}/practitioner/${practitionerId}/pending-count`,
       {
         headers: {
-          Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+          Authorization: `Bearer ${localStorage.getItem("accessToken")}`,
           "Content-Type": "application/json",
         },
       }

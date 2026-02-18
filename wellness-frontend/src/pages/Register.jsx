@@ -9,18 +9,71 @@ export default function Register() {
     password: '',
     role: 'PATIENT'
   });
+  const [errors, setErrors] = useState({});
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // Email validation regex
+  const validateEmail = (email) => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
+
+  // Password validation
+  const validatePassword = (password) => {
+    if (password.length < 6) {
+      return "Password must be at least 6 characters long";
+    }
+    if (password.length > 100) {
+      return "Password must be less than 100 characters";
+    }
+    return null;
+  };
+
+  // Name validation
+  const validateName = (name) => {
+    if (!name || name.trim().length === 0) {
+      return "Full name is required";
+    }
+    if (name.trim().length < 2) {
+      return "Full name must be at least 2 characters";
+    }
+    return null;
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+    setErrors({});
     setLoading(true);
+
+    // Client-side validation
+    const newErrors = {};
+    
+    const nameError = validateName(formData.fullName);
+    if (nameError) {
+      newErrors.fullName = nameError;
+    }
+
+    if (!formData.email || !validateEmail(formData.email)) {
+      newErrors.email = "Please enter a valid email address";
+    }
+
+    const passwordError = validatePassword(formData.password);
+    if (passwordError) {
+      newErrors.password = passwordError;
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      setLoading(false);
+      return;
+    }
 
     try {
       const payload = {
-        name: formData.fullName,
-        email: formData.email,
+        name: formData.fullName.trim(),
+        email: formData.email.trim().toLowerCase(),
         password: formData.password,
         role: formData.role,
         bio: ""
@@ -29,7 +82,7 @@ export default function Register() {
       console.log("Sending registration request:", payload);
 
       // Call backend API for registration
-      const response = await fetch("http://localhost:8081/api/auth/register", {
+      const response = await fetch("/api/auth/register", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -42,7 +95,16 @@ export default function Register() {
       console.log("Response data:", data);
 
       if (!response.ok) {
-        setError(data.message || "Registration failed. Please try again.");
+        // Handle backend validation errors
+        if (data.errors) {
+          const backendErrors = {};
+          Object.keys(data.errors).forEach(key => {
+            if (key === 'name') backendErrors.fullName = data.errors[key];
+            else backendErrors[key] = data.errors[key];
+          });
+          setErrors(backendErrors);
+        }
+        setError(data.message || "Registration failed. Please check your input and try again.");
         setLoading(false);
         return;
       }
@@ -113,11 +175,25 @@ export default function Register() {
               <input
                 type="text"
                 placeholder="John Doe"
-                className="w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#1f6f66] focus:outline-none"
+                className={`w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:outline-none ${
+                  errors.fullName 
+                    ? 'border-red-500 focus:ring-red-500' 
+                    : 'focus:ring-[#1f6f66]'
+                }`}
                 value={formData.fullName}
-                onChange={(e) => setFormData({...formData, fullName: e.target.value})}
+                onChange={(e) => {
+                  setFormData({...formData, fullName: e.target.value});
+                  if (errors.fullName) {
+                    const newErrors = {...errors};
+                    delete newErrors.fullName;
+                    setErrors(newErrors);
+                  }
+                }}
                 required
               />
+              {errors.fullName && (
+                <p className="text-red-500 text-xs mt-1">{errors.fullName}</p>
+              )}
             </div>
 
             <div>
@@ -127,11 +203,30 @@ export default function Register() {
               <input
                 type="email"
                 placeholder="example@email.com"
-                className="w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#1f6f66] focus:outline-none"
+                className={`w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:outline-none ${
+                  errors.email 
+                    ? 'border-red-500 focus:ring-red-500' 
+                    : 'focus:ring-[#1f6f66]'
+                }`}
                 value={formData.email}
-                onChange={(e) => setFormData({...formData, email: e.target.value})}
+                onChange={(e) => {
+                  setFormData({...formData, email: e.target.value});
+                  if (errors.email) {
+                    const newErrors = {...errors};
+                    delete newErrors.email;
+                    setErrors(newErrors);
+                  }
+                }}
+                onBlur={(e) => {
+                  if (e.target.value && !validateEmail(e.target.value)) {
+                    setErrors({...errors, email: "Please enter a valid email address"});
+                  }
+                }}
                 required
               />
+              {errors.email && (
+                <p className="text-red-500 text-xs mt-1">{errors.email}</p>
+              )}
             </div>
 
             <div>
@@ -140,12 +235,39 @@ export default function Register() {
               </label>
               <input
                 type="password"
-                placeholder="••••••••"
-                className="w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#1f6f66] focus:outline-none"
+                placeholder="•••••••• (minimum 6 characters)"
+                className={`w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:outline-none ${
+                  errors.password 
+                    ? 'border-red-500 focus:ring-red-500' 
+                    : 'focus:ring-[#1f6f66]'
+                }`}
                 value={formData.password}
-                onChange={(e) => setFormData({...formData, password: e.target.value})}
+                onChange={(e) => {
+                  setFormData({...formData, password: e.target.value});
+                  if (errors.password) {
+                    const newErrors = {...errors};
+                    delete newErrors.password;
+                    setErrors(newErrors);
+                  }
+                }}
+                onBlur={(e) => {
+                  const passwordError = validatePassword(e.target.value);
+                  if (passwordError) {
+                    setErrors({...errors, password: passwordError});
+                  }
+                }}
                 required
               />
+              {errors.password && (
+                <p className="text-red-500 text-xs mt-1">{errors.password}</p>
+              )}
+              {!errors.password && formData.password && formData.password.length > 0 && (
+                <p className="text-gray-500 text-xs mt-1">
+                  {formData.password.length < 6 
+                    ? `${6 - formData.password.length} more characters needed`
+                    : '✓ Password length is valid'}
+                </p>
+              )}
             </div>
 
             <div>

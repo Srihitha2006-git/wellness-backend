@@ -10,21 +10,27 @@ export default function Login() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const clearAuthStorage = () => {
+    localStorage.removeItem("user");
+    localStorage.removeItem("accessToken");
+    localStorage.removeItem("refreshToken");
+    localStorage.removeItem("userRole");
+    localStorage.removeItem("adminLoggedIn");
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
     setLoading(true);
-    
+    clearAuthStorage();
+
     try {
       const payload = {
-        email: credentials.email,
+        email: credentials.email.trim(),
         password: credentials.password,
       };
 
-      console.log("Sending login request:", payload);
-
-      // Call backend API for login
-      const response = await fetch("http://localhost:8081/api/auth/login", {
+      const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -32,18 +38,27 @@ export default function Login() {
         body: JSON.stringify(payload),
       });
 
-      console.log("Response status:", response.status);
-      const data = await response.json();
-      console.log("Response data:", data);
-
-      if (!response.ok) {
-        const errorData = data;
-        setError(errorData.message || "Invalid email or password");
+      let data;
+      try {
+        data = await response.json();
+      } catch {
+        clearAuthStorage();
+        setError("Invalid response from server. Please try again.");
         setLoading(false);
         return;
       }
 
-      // Store user data and tokens
+      // Only treat as success when backend returns 200 and valid auth payload
+      const success = response.ok && response.status === 200 && data && data.accessToken && data.user;
+
+      if (!success) {
+        clearAuthStorage();
+        setError(data?.message || "Invalid email or password");
+        setLoading(false);
+        return;
+      }
+
+      // Store only after confirmed success from backend
       localStorage.setItem("user", JSON.stringify(data.user));
       localStorage.setItem("accessToken", data.accessToken);
       localStorage.setItem("refreshToken", data.refreshToken);
@@ -54,7 +69,7 @@ export default function Login() {
         // Check if practitioner has completed onboarding
         try {
           const onboardingResponse = await fetch(
-            "http://localhost:8081/api/practitioners/me/onboarding-status",
+            "/api/practitioners/me/onboarding-status",
             {
               method: "GET",
               headers: {
@@ -92,7 +107,8 @@ export default function Login() {
       }
     } catch (err) {
       console.error("Login error:", err);
-      setError("Network error: " + err.message);
+      clearAuthStorage();
+      setError("Could not reach server. Check your connection and try again.");
     } finally {
       setLoading(false);
     }

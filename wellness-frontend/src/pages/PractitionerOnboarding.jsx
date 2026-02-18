@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import axios from "axios";
+import { uploadDocuments } from "../services/documentService";
 
 export default function PractitionerOnboarding() {
   const navigate = useNavigate();
@@ -34,7 +35,7 @@ export default function PractitionerOnboarding() {
         }
 
         const response = await fetch(
-          'http://localhost:8081/api/practitioners/me/onboarding-status',
+          '/api/practitioners/me/onboarding-status',
           {
             method: 'GET',
             headers: {
@@ -122,7 +123,7 @@ export default function PractitionerOnboarding() {
       console.log("Submitting practitioner profile:", practitionerData);
 
       const response = await axios.post(
-        "http://localhost:8081/api/practitioners",
+        "/api/practitioners",
         practitionerData,
         {
           headers: {
@@ -133,13 +134,25 @@ export default function PractitionerOnboarding() {
       );
 
       console.log("Practitioner profile created successfully:", response.data);
+      const practitionerId = response.data.id;
 
-      // Store practitioner details in localStorage
+      // Upload documents
+      console.log("Uploading documents...");
+      try {
+        const uploadedDocs = await uploadDocuments(practitionerId, uploadedFiles);
+        console.log("Documents uploaded successfully:", uploadedDocs);
+      } catch (uploadErr) {
+        console.error("Error uploading documents:", uploadErr);
+        throw new Error("Practitioner profile created but documents upload failed");
+      }
+
+      // Store practitioner details in localStorage (for convenience only)
       localStorage.setItem('practitionerData', JSON.stringify(formData));
-      localStorage.setItem('verificationStatus', 'verified');
       localStorage.setItem('uploadedFilesCount', uploadedFiles.length);
-      localStorage.setItem('practitionerId', response.data.id);
+      localStorage.setItem('practitionerId', practitionerId);
 
+      // Show success message that request was sent.
+      // Actual verification status will be controlled by admin in the backend.
       setVerificationStatus('verified');
       setErrors({});
     } catch (err) {
