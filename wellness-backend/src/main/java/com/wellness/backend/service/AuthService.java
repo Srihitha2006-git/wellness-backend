@@ -7,6 +7,8 @@ import com.wellness.backend.dto.UserDTO;
 import com.wellness.backend.model.User;
 import com.wellness.backend.repository.UserRepository;
 import com.wellness.backend.security.JwtService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -21,18 +23,23 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class AuthService {
 
+    private static final Logger logger = LoggerFactory.getLogger(AuthService.class);
+
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
-    private final UserService userService; // For mapping User → UserDTO
+    private final UserService userService;
+    private final EmailService emailService;
 
     @Autowired
     public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder,
-                       JwtService jwtService, UserService userService) {
+            JwtService jwtService, UserService userService,
+            EmailService emailService) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.userService = userService;
+        this.emailService = emailService;
     }
 
     // ================= REGISTER NEW USER =================
@@ -53,6 +60,17 @@ public class AuthService {
 
         // Save user
         User savedUser = userRepository.save(user);
+
+        // Send role-based registration email
+        try {
+            if (savedUser.getRole() == User.Role.PRACTITIONER) {
+                emailService.sendPractitionerRegistrationEmail(savedUser.getName(), savedUser.getEmail());
+            } else {
+                emailService.sendUserWelcomeEmail(savedUser.getName(), savedUser.getEmail());
+            }
+        } catch (Exception e) {
+            logger.error("Registration email failed for {}: {}", savedUser.getEmail(), e.getMessage());
+        }
 
         // Generate JWT tokens using email and role
         String accessToken = jwtService.generateToken(savedUser.getEmail(), savedUser.getRole().toString());
