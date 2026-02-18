@@ -2,6 +2,7 @@ import { useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import axios from "axios";
 import { getAllRequests } from "../services/requestService";
+import { getDocumentsForPractitioner } from "../services/documentService";
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -13,14 +14,16 @@ export default function AdminDashboard() {
   const [requestsLoading, setRequestsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [documents, setDocuments] = useState([]);
+  const [documentsLoading, setDocumentsLoading] = useState(false);
 
   useEffect(() => {
     // Fetch practitioners from backend API
     const fetchPractitioners = async () => {
       try {
         setLoading(true);
-        console.log("Fetching practitioners from http://localhost:8081/api/practitioners");
-        const response = await axios.get("http://localhost:8081/api/practitioners", {
+        console.log("Fetching practitioners from /api/practitioners");
+        const response = await axios.get("/api/practitioners", {
           headers: {
             "Content-Type": "application/json",
           },
@@ -76,6 +79,28 @@ export default function AdminDashboard() {
     fetchRequests();
   }, []);
 
+  // Fetch documents when a practitioner is selected
+  useEffect(() => {
+    if (selectedPractitioner) {
+      const fetchDocuments = async () => {
+        try {
+          setDocumentsLoading(true);
+          const docs = await getDocumentsForPractitioner(selectedPractitioner.id);
+          setDocuments(docs || []);
+        } catch (err) {
+          console.error("Error fetching documents:", err);
+          setDocuments([]);
+        } finally {
+          setDocumentsLoading(false);
+        }
+      };
+
+      fetchDocuments();
+    } else {
+      setDocuments([]);
+    }
+  }, [selectedPractitioner]);
+
   const filteredPractitioners = practitioners.filter(
     (p) =>
       p.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -85,10 +110,16 @@ export default function AdminDashboard() {
 
   const handleApprove = async (id) => {
     try {
+      const token = localStorage.getItem("accessToken");
       await axios.put(
-        `http://localhost:8081/api/practitioners/${id}/verify`,
+        `/api/practitioners/${id}/verify`,
         {},
-        { params: { verified: true } }
+        { 
+          params: { verified: true },
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
       );
       // Update local state
       setPractitioners((prev) =>
@@ -103,10 +134,16 @@ export default function AdminDashboard() {
 
   const handleReject = async (id) => {
     try {
+      const token = localStorage.getItem("accessToken");
       await axios.put(
-        `http://localhost:8081/api/practitioners/${id}/verify`,
+        `/api/practitioners/${id}/verify`,
         {},
-        { params: { verified: false } }
+        { 
+          params: { verified: false },
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
       );
       // Update local state
       setPractitioners((prev) =>
@@ -360,6 +397,89 @@ export default function AdminDashboard() {
                         <p className="text-gray-900">{selectedPractitioner.qualifications}</p>
                       </div>
                     </div>
+                  </div>
+
+                  {/* Uploaded Documents */}
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-800 mb-4">📄 Uploaded Documents</h3>
+                    {documentsLoading ? (
+                      <div className="text-center py-8">
+                        <p className="text-gray-500">Loading documents...</p>
+                      </div>
+                    ) : documents.length === 0 ? (
+                      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                        <p className="text-sm text-yellow-800">No documents uploaded yet</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {documents.map((doc) => (
+                          <div
+                            key={doc.id}
+                            className="flex items-center justify-between p-3 bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 transition"
+                          >
+                            <div className="flex items-center gap-3 flex-1">
+                              <div className="w-10 h-10 bg-red-100 rounded flex items-center justify-center flex-shrink-0">
+                                <span className="text-red-600 text-xs font-bold">PDF</span>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-gray-900 truncate">
+                                  {doc.fileName}
+                                </p>
+                                <div className="flex gap-4 text-xs text-gray-500 mt-1">
+                                  <span>{(doc.fileSize / 1024).toFixed(2)} KB</span>
+                                  <span>
+                                    {new Date(doc.uploadedAt).toLocaleDateString()}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                            <button
+                              className="ml-4 px-3 py-1 text-sm text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition"
+                              onClick={async () => {
+                                try {
+                                  const token = localStorage.getItem("accessToken");
+                                  if (!token) {
+                                    alert("You must be logged in to view documents.");
+                                    return;
+                                  }
+
+                                  const response = await axios.get(
+                                    `/api/practitioners/documents/${doc.id}/download`,
+                                    {
+                                      headers: {
+                                        Authorization: `Bearer ${token}`,
+                                      },
+                                      responseType: "blob",
+                                    }
+                                  );
+
+                                  const contentType =
+                                    response.headers["content-type"] || "application/pdf";
+
+                                  const blob = new Blob([response.data], { type: contentType });
+                                  const fileURL = window.URL.createObjectURL(blob);
+
+                                  const link = document.createElement("a");
+                                  link.href = fileURL;
+                                  link.download = doc.fileName;
+                                  link.target = "_blank";
+                                  document.body.appendChild(link);
+                                  link.click();
+                                  link.remove();
+
+                                  window.URL.revokeObjectURL(fileURL);
+                                } catch (err) {
+                                  console.error("Error downloading document:", err);
+                                  alert("Failed to open document. Please try again.");
+                                }
+                              }}
+                            >
+                              View
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   {/* Action Buttons */}

@@ -6,6 +6,7 @@ export default function PractitionerDashboard() {
   const [activeSection, setActiveSection] = useState('dashboard');
   const [appointmentFilter, setAppointmentFilter] = useState('all');
   const [loading, setLoading] = useState(true);
+  const [isVerified, setIsVerified] = useState(false);
 
   useEffect(() => {
     // Check if practitioner has completed onboarding
@@ -17,15 +18,8 @@ export default function PractitionerDashboard() {
           return;
         }
 
-        // Check local verification status first
-        const localVerificationStatus = localStorage.getItem('verificationStatus');
-        if (localVerificationStatus === 'verified') {
-          setLoading(false);
-          return;
-        }
-
         const response = await fetch(
-          'http://localhost:8081/api/practitioners/me/onboarding-status',
+          '/api/practitioners/me/onboarding-status',
           {
             method: 'GET',
             headers: {
@@ -38,6 +32,9 @@ export default function PractitionerDashboard() {
         if (response.ok) {
           const onboardingStatus = await response.json();
           console.log('Onboarding status:', onboardingStatus);
+
+          // Save verification flag from backend
+          setIsVerified(!!onboardingStatus.verified);
 
           // Only redirect to onboarding if profile doesn't exist
           // Allow dashboard access even if verification is pending
@@ -83,22 +80,38 @@ export default function PractitionerDashboard() {
             </div>
             <h1 className="text-xl font-bold">WellnessHub</h1>
           </div>
-          {/* Verified Badge */}
-          <div className="mt-4 flex items-center gap-2 bg-green-500/10 border border-green-500/30 rounded-lg p-2">
-            <svg 
-              className="w-5 h-5 text-green-500" 
-              fill="none" 
-              stroke="currentColor" 
+          {/* Verification Badge */}
+          <div
+            className={`mt-4 flex items-center gap-2 rounded-lg p-2 border ${
+              isVerified
+                ? 'bg-green-500/10 border-green-500/30'
+                : 'bg-amber-500/10 border-amber-500/30'
+            }`}
+          >
+            <svg
+              className={`w-5 h-5 ${isVerified ? 'text-green-500' : 'text-amber-500'}`}
+              fill="none"
+              stroke="currentColor"
               viewBox="0 0 24 24"
             >
-              <path 
-                strokeLinecap="round" 
-                strokeLinejoin="round" 
-                strokeWidth={2} 
-                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" 
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d={
+                  isVerified
+                    ? 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z'
+                    : 'M12 8v4m0 4h.01M12 2a10 10 0 100 20 10 10 0 000-20z'
+                }
               />
             </svg>
-            <span className="text-xs font-semibold text-green-400">Verified Practitioner</span>
+            <span
+              className={`text-xs font-semibold ${
+                isVerified ? 'text-green-400' : 'text-amber-300'
+              }`}
+            >
+              {isVerified ? 'Verified Practitioner' : 'Verification Pending'}
+            </span>
           </div>
         </div>
 

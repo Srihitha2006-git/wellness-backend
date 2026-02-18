@@ -4,13 +4,21 @@ import com.wellness.backend.dto.PractitionerProfileDTO;
 import com.wellness.backend.dto.PractitionerCreateDTO;
 import com.wellness.backend.dto.PractitionerUpdateDTO;
 import com.wellness.backend.dto.OnboardingStatusDTO;
+import com.wellness.backend.dto.PractitionerDocumentDTO;
+import com.wellness.backend.model.PractitionerDocument;
 import com.wellness.backend.service.PractitionerService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.net.MalformedURLException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.List;
 
 @RestController
@@ -108,5 +116,75 @@ public class PractitionerController {
 
         return ResponseEntity.ok(
                 practitionerService.searchBySpecialization(specialization));
+    }
+
+    // ================= UPLOAD DOCUMENTS (PRACTITIONER ONLY) =================
+    @PreAuthorize("hasRole('PRACTITIONER')")
+    @PostMapping("/{practitionerId}/documents/upload")
+    public ResponseEntity<List<PractitionerDocumentDTO>> uploadDocuments(
+            @PathVariable Integer practitionerId,
+            @RequestParam("files") MultipartFile[] files) {
+
+        return ResponseEntity.ok(
+                practitionerService.uploadDocuments(practitionerId, files));
+    }
+
+    // ================= GET ALL DOCUMENTS FOR A PRACTITIONER (ADMIN) =================
+    @PreAuthorize("hasRole('ADMIN')")
+    @GetMapping("/{practitionerId}/documents")
+    public ResponseEntity<List<PractitionerDocumentDTO>> getDocumentsForPractitioner(
+            @PathVariable Integer practitionerId) {
+
+        return ResponseEntity.ok(
+                practitionerService.getDocumentsForPractitioner(practitionerId));
+    }
+
+    // ================= GET DOCUMENTS FOR CURRENT PRACTITIONER =================
+    @PreAuthorize("hasRole('PRACTITIONER')")
+    @GetMapping("/me/documents")
+    public ResponseEntity<List<PractitionerDocumentDTO>> getMyDocuments() {
+
+        return ResponseEntity.ok(practitionerService.getMyDocuments());
+    }
+
+    // ================= DELETE DOCUMENT (ADMIN/PRACTITIONER) =================
+    @PreAuthorize("hasAnyRole('PRACTITIONER','ADMIN')")
+    @DeleteMapping("/documents/{documentId}")
+    public ResponseEntity<Void> deleteDocument(
+            @PathVariable Integer documentId) {
+
+        practitionerService.deleteDocument(documentId);
+        return ResponseEntity.noContent().build();
+    }
+
+    // ================= DOWNLOAD DOCUMENT (ADMIN/PRACTITIONER) =================
+    @PreAuthorize("hasAnyRole('PRACTITIONER','ADMIN')")
+    @GetMapping("/documents/{documentId}/download")
+    public ResponseEntity<Resource> downloadDocument(
+            @PathVariable Integer documentId) {
+
+        PractitionerDocument document = practitionerService.getDocumentById(documentId);
+
+        try {
+            Path filePath = Paths.get(document.getFilePath()).toAbsolutePath().normalize();
+            Resource resource = new org.springframework.core.io.UrlResource(filePath.toUri());
+
+            if (!resource.exists()) {
+                return ResponseEntity.notFound().build();
+            }
+
+            String contentType = document.getFileType();
+            if (contentType == null || contentType.isBlank()) {
+                contentType = "application/pdf";
+            }
+
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CONTENT_DISPOSITION,
+                            "inline; filename=\"" + document.getFileName() + "\"")
+                    .header(HttpHeaders.CONTENT_TYPE, contentType)
+                    .body(resource);
+        } catch (MalformedURLException e) {
+            return ResponseEntity.internalServerError().build();
+        }
     }
 }
