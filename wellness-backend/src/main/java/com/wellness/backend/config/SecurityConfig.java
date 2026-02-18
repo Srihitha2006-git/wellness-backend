@@ -4,6 +4,7 @@ import com.wellness.backend.security.JwtAuthenticationFilter;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -28,7 +29,7 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(Arrays.asList("http://localhost:5173", "http://localhost:3000"));
+        configuration.setAllowedOrigins(Arrays.asList("http://localhost:5173", "http://localhost:5174", "http://localhost:3000"));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList("*"));
         configuration.setAllowCredentials(true);
@@ -49,9 +50,15 @@ public class SecurityConfig {
                 .requestMatchers("/").permitAll()
                 .requestMatchers("/api/auth/**").permitAll()
                 .requestMatchers("/h2-console/**").permitAll()
-                .requestMatchers("/api/practitioners").permitAll()
-                .requestMatchers("/api/practitioners/verified").permitAll()
-                .requestMatchers("/api/practitioners/{id}").permitAll()
+                // GET requests to /api/practitioners are public
+                .requestMatchers(HttpMethod.GET, "/api/practitioners").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/practitioners/verified").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/practitioners/**").permitAll()
+                // POST requests to /api/practitioners require authentication
+                .requestMatchers(HttpMethod.POST, "/api/practitioners").authenticated()
+                // PUT/DELETE requests require authentication
+                .requestMatchers(HttpMethod.PUT, "/api/practitioners/**").authenticated()
+                .requestMatchers(HttpMethod.DELETE, "/api/practitioners/**").authenticated()
                 .requestMatchers("/api/practitioner/**").hasRole("PRACTITIONER")
                 .requestMatchers("/api/user/**").hasRole("PATIENT")
                 .anyRequest().authenticated()

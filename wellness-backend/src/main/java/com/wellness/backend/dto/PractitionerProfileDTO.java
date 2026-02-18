@@ -1,5 +1,7 @@
 package com.wellness.backend.dto;
 
+import java.time.LocalDateTime;
+
 public class PractitionerProfileDTO {
     private Integer id;
     private Integer userId;
@@ -11,6 +13,7 @@ public class PractitionerProfileDTO {
     private String qualifications;
     private String experience;
     private String bio;
+    private LocalDateTime createdAt;
 
     public Integer getId() {
         return id;
@@ -90,5 +93,13 @@ public class PractitionerProfileDTO {
 
     public void setBio(String bio) {
         this.bio = bio;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
     }
 }

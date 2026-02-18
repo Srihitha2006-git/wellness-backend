@@ -1,11 +1,15 @@
 import { useNavigate } from "react-router-dom";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import axios from "axios";
 
 export default function PractitionerOnboarding() {
   const navigate = useNavigate();
   const [verificationStatus, setVerificationStatus] = useState('pending'); // 'pending' or 'verified'
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [errors, setErrors] = useState({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [apiError, setApiError] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
@@ -19,6 +23,47 @@ export default function PractitionerOnboarding() {
     consultationFee: ''
   });
 
+  useEffect(() => {
+    // Check if practitioner is already verified
+    const checkVerificationStatus = async () => {
+      try {
+        const accessToken = localStorage.getItem('accessToken');
+        if (!accessToken) {
+          setLoading(false);
+          return;
+        }
+
+        const response = await fetch(
+          'http://localhost:8081/api/practitioners/me/onboarding-status',
+          {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${accessToken}`
+            }
+          }
+        );
+
+        if (response.ok) {
+          const onboardingStatus = await response.json();
+          
+          // If profile already exists, redirect to dashboard (regardless of verification status)
+          if (onboardingStatus.profileExists) {
+            navigate('/practitioner/dashboard');
+            return;
+          }
+        }
+        
+        setLoading(false);
+      } catch (err) {
+        console.error('Error checking verification status:', err);
+        setLoading(false);
+      }
+    };
+
+    checkVerificationStatus();
+  }, [navigate]);
+
   const handleFileUpload = (e) => {
     const files = Array.from(e.target.files);
     const pdfFiles = files.filter(file => file.type === 'application/pdf');
@@ -30,7 +75,7 @@ export default function PractitionerOnboarding() {
     setUploadedFiles(prev => prev.filter((_, i) => i !== index));
   };
 
-  const handleVerify = () => {
+  const handleVerify = async () => {
     // Check if all required fields are filled
     const requiredFields = [
       'fullName',
@@ -62,14 +107,53 @@ export default function PractitionerOnboarding() {
       return;
     }
 
-    // Simulate verification process
-    setVerificationStatus('verified');
-    setErrors({});
-    
-    // Store practitioner details in localStorage
-    localStorage.setItem('practitionerData', JSON.stringify(formData));
-    localStorage.setItem('verificationStatus', 'verified');
-    localStorage.setItem('uploadedFilesCount', uploadedFiles.length);
+    setIsSubmitting(true);
+    setApiError(null);
+
+    try {
+      // Create the practitioner profile on the backend
+      const practitionerData = {
+        specialization: formData.specialization,
+        qualifications: formData.qualifications,
+        experience: `${formData.yearsOfExperience} years`,
+        bio: formData.bio
+      };
+
+      console.log("Submitting practitioner profile:", practitionerData);
+
+      const response = await axios.post(
+        "http://localhost:8081/api/practitioners",
+        practitionerData,
+        {
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${localStorage.getItem("accessToken")}`
+          }
+        }
+      );
+
+      console.log("Practitioner profile created successfully:", response.data);
+
+      // Store practitioner details in localStorage
+      localStorage.setItem('practitionerData', JSON.stringify(formData));
+      localStorage.setItem('verificationStatus', 'verified');
+      localStorage.setItem('uploadedFilesCount', uploadedFiles.length);
+      localStorage.setItem('practitionerId', response.data.id);
+
+      setVerificationStatus('verified');
+      setErrors({});
+    } catch (err) {
+      console.error("Error creating practitioner profile:", err);
+      const errorMsg = err.response?.data?.message || err.message || "Failed to submit practitioner profile";
+      setApiError(errorMsg);
+      console.error("Full error details:", {
+        message: err.message,
+        status: err.response?.status,
+        data: err.response?.data
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleContinueToDashboard = () => {
@@ -77,7 +161,16 @@ export default function PractitionerOnboarding() {
   };
 
   return (
-    <div className="min-h-screen flex bg-gradient-to-br from-[#f5f3ea] to-[#e7e2d3]">
+    <>
+      {loading ? (
+        <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-[#f5f3ea] to-[#e7e2d3]">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#1f6f66] mx-auto mb-4"></div>
+            <p className="text-gray-600 font-semibold">Checking your profile...</p>
+          </div>
+        </div>
+      ) : (
+        <div className="min-h-screen flex bg-gradient-to-br from-[#f5f3ea] to-[#e7e2d3]">
       
       {/* LEFT SIDE BRAND PANEL */}
       <div className="hidden md:flex w-1/2 bg-[#1f6f66] text-white flex-col justify-center px-16">
@@ -445,6 +538,18 @@ export default function PractitionerOnboarding() {
             </div>
 
             {/* Verification Status */}
+            {apiError && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
+                <div className="w-10 h-10 bg-red-500 rounded-full flex items-center justify-center text-white text-xl flex-shrink-0">
+                  ❌
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-red-900">Submission Failed</p>
+                  <p className="text-xs text-red-800 mt-1">{apiError}</p>
+                </div>
+              </div>
+            )}
+
             {verificationStatus === 'pending' && (
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-start gap-3">
                 <div className="w-10 h-10 bg-amber-500 rounded-full flex items-center justify-center text-white text-xl flex-shrink-0">
@@ -498,6 +603,8 @@ export default function PractitionerOnboarding() {
 
         </div>
       </div>
-    </div>
+        </div>
+      )}
+    </>
   );
 }

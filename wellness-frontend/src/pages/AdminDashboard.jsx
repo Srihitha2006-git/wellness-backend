@@ -1,38 +1,79 @@
 import { useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
+import axios from "axios";
+import { getAllRequests } from "../services/requestService";
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
   const [practitioners, setPractitioners] = useState([]);
   const [selectedPractitioner, setSelectedPractitioner] = useState(null);
-  const [reviewStatus, setReviewStatus] = useState({});
+  const [requests, setRequests] = useState([]);
+  const [selectedRequest, setSelectedRequest] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [requestsLoading, setRequestsLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
 
   useEffect(() => {
-    // Load practitioners from localStorage (simulated data)
-    const storedData = localStorage.getItem("practitionerData");
-    if (storedData) {
-      const parsedData = JSON.parse(storedData);
-      // Create a mock list of practitioners for demo
-      const mockPractitioners = [
-        {
-          id: 1,
-          fullName: parsedData.fullName || "Dr. John Smith",
-          email: parsedData.email || "john@example.com",
-          specialization: parsedData.specialization || "Physiotherapy",
-          licenseNumber: parsedData.licenseNumber || "LIC-12345",
-          yearsOfExperience: parsedData.yearsOfExperience || "5",
-          phone: parsedData.phone || "+1 234 567 8900",
-          bio: parsedData.bio || "Professional practitioner",
-          qualifications: parsedData.qualifications || "MBBS, MD",
-          clinicAddress: parsedData.clinicAddress || "123 Medical Plaza",
-          consultationFee: parsedData.consultationFee || "75",
-          status: "pending",
-          submittedDate: new Date().toLocaleDateString()
-        }
-      ];
-      setPractitioners(mockPractitioners);
-    }
+    // Fetch practitioners from backend API
+    const fetchPractitioners = async () => {
+      try {
+        setLoading(true);
+        console.log("Fetching practitioners from http://localhost:8081/api/practitioners");
+        const response = await axios.get("http://localhost:8081/api/practitioners", {
+          headers: {
+            "Content-Type": "application/json",
+          },
+        });
+        console.log("Success! Response data:", response.data);
+        // Map backend data to frontend format
+        const mappedPractitioners = response.data.map((practitioner) => ({
+          id: practitioner.id,
+          fullName: practitioner.userName,
+          email: practitioner.email,
+          specialization: practitioner.specialization,
+          qualifications: practitioner.qualifications || "Not provided",
+          experience: practitioner.experience || "Not provided",
+          status: practitioner.verified ? "approved" : "pending",
+          submittedDate: practitioner.createdAt
+            ? new Date(practitioner.createdAt).toLocaleDateString()
+            : new Date().toLocaleDateString(),
+          createdAt: practitioner.createdAt,
+        }));
+        setPractitioners(mappedPractitioners);
+        setError(null);
+      } catch (err) {
+        console.error("Error fetching practitioners:", err);
+        console.error("Error details:", {
+          message: err.message,
+          status: err.response?.status,
+          data: err.response?.data,
+        });
+        setError("Failed to load practitioners. Please try again.");
+        setPractitioners([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    // Fetch all requests for admin (latest first)
+    const fetchRequests = async () => {
+      try {
+        setRequestsLoading(true);
+        console.log("Fetching all requests from backend");
+        const requestsData = await getAllRequests();
+        console.log("Requests fetched:", requestsData);
+        setRequests(requestsData || []);
+      } catch (err) {
+        console.error("Error fetching requests:", err);
+        setRequests([]);
+      } finally {
+        setRequestsLoading(false);
+      }
+    };
+
+    fetchPractitioners();
+    fetchRequests();
   }, []);
 
   const filteredPractitioners = practitioners.filter(
@@ -42,20 +83,40 @@ export default function AdminDashboard() {
       p.specialization.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleApprove = (id) => {
-    setPractitioners((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, status: "approved" } : p))
-    );
-    setReviewStatus({ ...reviewStatus, [id]: "approved" });
-    setSelectedPractitioner(null);
+  const handleApprove = async (id) => {
+    try {
+      await axios.put(
+        `http://localhost:8081/api/practitioners/${id}/verify`,
+        {},
+        { params: { verified: true } }
+      );
+      // Update local state
+      setPractitioners((prev) =>
+        prev.map((p) => (p.id === id ? { ...p, status: "approved" } : p))
+      );
+      setSelectedPractitioner(null);
+    } catch (err) {
+      console.error("Error approving practitioner:", err);
+      alert("Failed to approve practitioner");
+    }
   };
 
-  const handleReject = (id) => {
-    setPractitioners((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, status: "rejected" } : p))
-    );
-    setReviewStatus({ ...reviewStatus, [id]: "rejected" });
-    setSelectedPractitioner(null);
+  const handleReject = async (id) => {
+    try {
+      await axios.put(
+        `http://localhost:8081/api/practitioners/${id}/verify`,
+        {},
+        { params: { verified: false } }
+      );
+      // Update local state
+      setPractitioners((prev) =>
+        prev.map((p) => (p.id === id ? { ...p, status: "pending" } : p))
+      );
+      setSelectedPractitioner(null);
+    } catch (err) {
+      console.error("Error rejecting practitioner:", err);
+      alert("Failed to reject practitioner");
+    }
   };
 
   const handleLogout = () => {
@@ -85,6 +146,51 @@ export default function AdminDashboard() {
     }
   };
 
+  const getRequestStatusColor = (status) => {
+    switch (status) {
+      case "ACCEPTED":
+        return "bg-green-100 text-green-800";
+      case "REJECTED":
+        return "bg-red-100 text-red-800";
+      case "COMPLETED":
+        return "bg-blue-100 text-blue-800";
+      case "CANCELLED":
+        return "bg-gray-100 text-gray-800";
+      default:
+        return "bg-yellow-100 text-yellow-800";
+    }
+  };
+
+  const getRequestStatusIcon = (status) => {
+    switch (status) {
+      case "ACCEPTED":
+        return "✅";
+      case "REJECTED":
+        return "❌";
+      case "COMPLETED":
+        return "🎉";
+      case "CANCELLED":
+        return "❌";
+      default:
+        return "⏳";
+    }
+  };
+
+  const getPriorityColor = (priority) => {
+    switch (priority) {
+      case "HIGH":
+        return "bg-red-100 text-red-800";
+      case "URGENT":
+        return "bg-red-200 text-red-900 font-bold";
+      case "NORMAL":
+        return "bg-blue-100 text-blue-800";
+      case "LOW":
+        return "bg-gray-100 text-gray-800";
+      default:
+        return "bg-blue-100 text-blue-800";
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
       {/* Header */}
@@ -105,7 +211,7 @@ export default function AdminDashboard() {
 
       <div className="max-w-7xl mx-auto px-6 py-8">
         {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-8">
           <div className="bg-white rounded-lg shadow p-6">
             <p className="text-gray-600 text-sm font-semibold">Total Practitioners</p>
             <p className="text-3xl font-bold text-[#1f6f66] mt-2">{practitioners.length}</p>
@@ -123,9 +229,13 @@ export default function AdminDashboard() {
             </p>
           </div>
           <div className="bg-white rounded-lg shadow p-6">
-            <p className="text-gray-600 text-sm font-semibold">Rejected</p>
-            <p className="text-3xl font-bold text-red-600 mt-2">
-              {practitioners.filter((p) => p.status === "rejected").length}
+            <p className="text-gray-600 text-sm font-semibold">Total Requests</p>
+            <p className="text-3xl font-bold text-purple-600 mt-2">{requests.length}</p>
+          </div>
+          <div className="bg-white rounded-lg shadow p-6">
+            <p className="text-gray-600 text-sm font-semibold">Pending Requests</p>
+            <p className="text-3xl font-bold text-orange-600 mt-2">
+              {requests.filter((r) => r.status === "PENDING").length}
             </p>
           </div>
         </div>
@@ -146,7 +256,15 @@ export default function AdminDashboard() {
               </div>
 
               <div className="max-h-screen overflow-y-auto">
-                {filteredPractitioners.length === 0 ? (
+                {loading ? (
+                  <div className="p-6 text-center text-gray-500">
+                    <p>Loading practitioners...</p>
+                  </div>
+                ) : error ? (
+                  <div className="p-6 text-center text-red-500">
+                    <p>{error}</p>
+                  </div>
+                ) : filteredPractitioners.length === 0 ? (
                   <div className="p-6 text-center text-gray-500">
                     No practitioners found
                   </div>
@@ -205,18 +323,6 @@ export default function AdminDashboard() {
                         <p className="text-gray-900 font-medium">{selectedPractitioner.email}</p>
                       </div>
                       <div>
-                        <p className="text-xs font-semibold text-gray-600 tracking-wide">PHONE</p>
-                        <p className="text-gray-900 font-medium">{selectedPractitioner.phone}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs font-semibold text-gray-600 tracking-wide">
-                          LICENSE NUMBER
-                        </p>
-                        <p className="text-gray-900 font-medium">
-                          {selectedPractitioner.licenseNumber}
-                        </p>
-                      </div>
-                      <div>
                         <p className="text-xs font-semibold text-gray-600 tracking-wide">
                           SUBMITTED DATE
                         </p>
@@ -233,10 +339,18 @@ export default function AdminDashboard() {
                     <div className="space-y-3">
                       <div>
                         <p className="text-xs font-semibold text-gray-600 tracking-wide">
-                          YEARS OF EXPERIENCE
+                          SPECIALIZATION
                         </p>
                         <p className="text-gray-900 font-medium">
-                          {selectedPractitioner.yearsOfExperience} years
+                          {selectedPractitioner.specialization}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-gray-600 tracking-wide">
+                          EXPERIENCE
+                        </p>
+                        <p className="text-gray-900 font-medium">
+                          {selectedPractitioner.experience}
                         </p>
                       </div>
                       <div>
@@ -244,33 +358,6 @@ export default function AdminDashboard() {
                           QUALIFICATIONS
                         </p>
                         <p className="text-gray-900">{selectedPractitioner.qualifications}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs font-semibold text-gray-600 tracking-wide">
-                          PROFESSIONAL BIO
-                        </p>
-                        <p className="text-gray-900 mt-1">{selectedPractitioner.bio}</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Practice Information */}
-                  <div>
-                    <h3 className="text-lg font-bold text-gray-800 mb-4">Practice Information</h3>
-                    <div className="space-y-3">
-                      <div>
-                        <p className="text-xs font-semibold text-gray-600 tracking-wide">
-                          CLINIC ADDRESS
-                        </p>
-                        <p className="text-gray-900">{selectedPractitioner.clinicAddress}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs font-semibold text-gray-600 tracking-wide">
-                          CONSULTATION FEE
-                        </p>
-                        <p className="text-gray-900 font-medium">
-                          ${selectedPractitioner.consultationFee}/hour
-                        </p>
                       </div>
                     </div>
                   </div>
@@ -323,6 +410,178 @@ export default function AdminDashboard() {
                 <div className="text-center">
                   <p className="text-gray-500 text-lg">Select a practitioner to review</p>
                   <p className="text-gray-400 text-sm mt-2">Click on any practitioner from the list to view their details</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Requests Section */}
+      <div className="max-w-7xl mx-auto px-6 py-8 border-t border-gray-200">
+        <h2 className="text-2xl font-bold text-gray-800 mb-6">Patient Requests to Practitioners</h2>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Requests List */}
+          <div className="lg:col-span-1">
+            <div className="bg-white rounded-lg shadow">
+              <div className="p-6 border-b border-gray-200">
+                <h3 className="text-xl font-bold text-gray-800">All Requests</h3>
+                <p className="text-sm text-gray-600 mt-1">Latest requests appear first</p>
+              </div>
+
+              <div className="max-h-96 overflow-y-auto">
+                {requestsLoading ? (
+                  <div className="p-6 text-center text-gray-500">
+                    <p>Loading requests...</p>
+                  </div>
+                ) : requests.length === 0 ? (
+                  <div className="p-6 text-center text-gray-500">
+                    <p>No requests found</p>
+                  </div>
+                ) : (
+                  requests.map((request) => (
+                    <div
+                      key={request.id}
+                      onClick={() => setSelectedRequest(request)}
+                      className={`p-4 border-b cursor-pointer hover:bg-gray-50 transition ${
+                        selectedRequest?.id === request.id
+                          ? "bg-blue-50 border-l-4 border-l-[#1f6f66]"
+                          : ""
+                      }`}
+                    >
+                      <div className="flex justify-between items-start gap-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-gray-900 truncate">
+                            {request.userName}
+                          </p>
+                          <p className="text-xs text-gray-600 truncate">
+                            To: {request.practitionerName}
+                          </p>
+                          <p className="text-xs text-gray-500 mt-1">
+                            {new Date(request.createdAt).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <div className="flex flex-col gap-1 text-right">
+                          <span
+                            className={`px-2 py-1 rounded text-xs font-semibold whitespace-nowrap ${getRequestStatusColor(
+                              request.status
+                            )}`}
+                          >
+                            {getRequestStatusIcon(request.status)} {request.status}
+                          </span>
+                          <span
+                            className={`px-2 py-1 rounded text-xs font-semibold whitespace-nowrap ${getPriorityColor(
+                              request.priority
+                            )}`}
+                          >
+                            {request.priority}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Request Details */}
+          <div className="lg:col-span-2">
+            {selectedRequest ? (
+              <div className="bg-white rounded-lg shadow overflow-hidden">
+                <div className="bg-gradient-to-r from-purple-600 to-pink-600 px-6 py-6 text-white">
+                  <h3 className="text-2xl font-bold">Request Details</h3>
+                  <p className="text-purple-100 mt-1">ID: #{selectedRequest.id}</p>
+                </div>
+
+                <div className="p-6 space-y-6">
+                  {/* Patient Information */}
+                  <div>
+                    <h4 className="text-lg font-bold text-gray-800 mb-4">Patient Information</h4>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-xs font-semibold text-gray-600 tracking-wide">NAME</p>
+                        <p className="text-gray-900 font-medium">{selectedRequest.userName}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-gray-600 tracking-wide">EMAIL</p>
+                        <p className="text-gray-900 font-medium">{selectedRequest.userEmail}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Practitioner Information */}
+                  <div>
+                    <h4 className="text-lg font-bold text-gray-800 mb-4">Practitioner Information</h4>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-xs font-semibold text-gray-600 tracking-wide">NAME</p>
+                        <p className="text-gray-900 font-medium">{selectedRequest.practitionerName}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-gray-600 tracking-wide">EMAIL</p>
+                        <p className="text-gray-900 font-medium">{selectedRequest.practitionerEmail}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Request Details */}
+                  <div>
+                    <h4 className="text-lg font-bold text-gray-800 mb-4">Request Details</h4>
+                    <div className="space-y-3">
+                      <div>
+                        <p className="text-xs font-semibold text-gray-600 tracking-wide">STATUS</p>
+                        <span
+                          className={`inline-block px-3 py-1 rounded-full text-sm font-semibold mt-1 ${getRequestStatusColor(
+                            selectedRequest.status
+                          )}`}
+                        >
+                          {getRequestStatusIcon(selectedRequest.status)} {selectedRequest.status}
+                        </span>
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-gray-600 tracking-wide">PRIORITY</p>
+                        <span
+                          className={`inline-block px-3 py-1 rounded-full text-sm font-semibold mt-1 ${getPriorityColor(
+                            selectedRequest.priority
+                          )}`}
+                        >
+                          {selectedRequest.priority}
+                        </span>
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-gray-600 tracking-wide">REQUESTED DATE</p>
+                        <p className="text-gray-900 font-medium">
+                          {new Date(selectedRequest.requestedDate).toLocaleString()}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-gray-600 tracking-wide">CREATED DATE</p>
+                        <p className="text-gray-900 font-medium">
+                          {new Date(selectedRequest.createdAt).toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Description */}
+                  {selectedRequest.description && (
+                    <div>
+                      <h4 className="text-lg font-bold text-gray-800 mb-4">Description</h4>
+                      <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                        <p className="text-gray-700">{selectedRequest.description}</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="bg-white rounded-lg shadow p-12 flex items-center justify-center h-96">
+                <div className="text-center">
+                  <p className="text-gray-500 text-lg">Select a request to view details</p>
+                  <p className="text-gray-400 text-sm mt-2">
+                    Click on any request from the list to view complete information
+                  </p>
                 </div>
               </div>
             )}

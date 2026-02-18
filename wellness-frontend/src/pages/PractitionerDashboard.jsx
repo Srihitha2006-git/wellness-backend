@@ -1,8 +1,76 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 export default function PractitionerDashboard() {
+  const navigate = useNavigate();
   const [activeSection, setActiveSection] = useState('dashboard');
   const [appointmentFilter, setAppointmentFilter] = useState('all');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Check if practitioner has completed onboarding
+    const checkOnboardingStatus = async () => {
+      try {
+        const accessToken = localStorage.getItem('accessToken');
+        if (!accessToken) {
+          navigate('/login');
+          return;
+        }
+
+        // Check local verification status first
+        const localVerificationStatus = localStorage.getItem('verificationStatus');
+        if (localVerificationStatus === 'verified') {
+          setLoading(false);
+          return;
+        }
+
+        const response = await fetch(
+          'http://localhost:8081/api/practitioners/me/onboarding-status',
+          {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${accessToken}`
+            }
+          }
+        );
+
+        if (response.ok) {
+          const onboardingStatus = await response.json();
+          console.log('Onboarding status:', onboardingStatus);
+
+          // Only redirect to onboarding if profile doesn't exist
+          // Allow dashboard access even if verification is pending
+          if (!onboardingStatus.profileExists) {
+            navigate('/practitioner/onboarding');
+            return;
+          }
+        } else {
+          // If status check fails, redirect to onboarding
+          navigate('/practitioner/onboarding');
+          return;
+        }
+
+        setLoading(false);
+      } catch (err) {
+        console.error('Error checking onboarding status:', err);
+        navigate('/practitioner/onboarding');
+      }
+    };
+
+    checkOnboardingStatus();
+  }, [navigate]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#1f6f66] mx-auto mb-4"></div>
+          <p className="text-gray-600 font-semibold">Loading Dashboard...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen bg-gray-50">

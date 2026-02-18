@@ -1,7 +1,9 @@
 package com.wellness.backend.service;
 
 import com.wellness.backend.dto.PractitionerProfileDTO;
+import com.wellness.backend.dto.PractitionerCreateDTO;
 import com.wellness.backend.dto.PractitionerUpdateDTO;
+import com.wellness.backend.dto.OnboardingStatusDTO;
 import com.wellness.backend.model.PractitionerProfile;
 import com.wellness.backend.model.User;
 import com.wellness.backend.repository.PractitionerProfileRepository;
@@ -11,6 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
@@ -28,7 +31,7 @@ public class PractitionerService {
     // ================= GET ALL PRACTITIONERS =================
     @Transactional(readOnly = true)
     public List<PractitionerProfileDTO> getAllPractitioners() {
-        return practitionerRepository.findAll()
+        return practitionerRepository.findAllOrderByCreatedAtDesc()
                 .stream()
                 .map(this::mapToDTO)
                 .collect(Collectors.toList());
@@ -59,6 +62,32 @@ public class PractitionerService {
                 .orElseThrow(() -> new RuntimeException("Practitioner profile not found for user: " + userId));
 
         return mapToDTO(practitioner);
+    }
+
+    // ================= CREATE PRACTITIONER PROFILE (PRACTITIONER ONLY) =================
+    @Transactional
+    public PractitionerProfileDTO createPractitionerProfile(PractitionerCreateDTO createDTO) {
+        User currentUser = userService.getCurrentAuthenticatedUser();
+
+        // Check if user is a practitioner
+        if (currentUser.getRole() != User.Role.PRACTITIONER) {
+            throw new AccessDeniedException("Only practitioners can create a practitioner profile");
+        }
+
+        // Check if profile already exists
+        if (practitionerRepository.existsByUser_Id(currentUser.getId())) {
+            throw new RuntimeException("Practitioner profile already exists for this user");
+        }
+
+        PractitionerProfile profile = new PractitionerProfile();
+        profile.setUser(currentUser);
+        profile.setSpecialization(createDTO.getSpecialization());
+        profile.setQualifications(createDTO.getQualifications());
+        profile.setExperience(createDTO.getExperience());
+        profile.setVerified(false); // Default to unverified
+        profile.setRating(0.0f);
+
+        return mapToDTO(practitionerRepository.save(profile));
     }
 
     // ================= UPDATE PRACTITIONER PROFILE =================
@@ -140,6 +169,21 @@ public class PractitionerService {
                 .collect(Collectors.toList());
     }
 
+    // ================= GET ONBOARDING STATUS =================
+    @Transactional(readOnly = true)
+    public OnboardingStatusDTO getOnboardingStatus() {
+        User currentUser = userService.getCurrentAuthenticatedUser();
+        
+        Optional<PractitionerProfile> profile = practitionerRepository.findByUser_Id(currentUser.getId());
+        
+        if (profile.isEmpty()) {
+            return new OnboardingStatusDTO(false, false); // No profile exists
+        }
+        
+        PractitionerProfile practitionerProfile = profile.get();
+        return new OnboardingStatusDTO(true, practitionerProfile.getVerified()); // Profile exists and verification status
+    }
+
     // ================= ENTITY → DTO =================
     private PractitionerProfileDTO mapToDTO(PractitionerProfile profile) {
 
@@ -155,6 +199,7 @@ public class PractitionerService {
         dto.setBio(profile.getUser().getBio());
         dto.setQualifications(profile.getQualifications());
         dto.setExperience(profile.getExperience());
+        dto.setCreatedAt(profile.getCreatedAt());
 
         return dto;
     }
