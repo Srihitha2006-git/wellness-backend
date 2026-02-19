@@ -6,6 +6,8 @@ import PractitionerDashboard from "./pages/PractitionerDashboard.jsx";
 import UserDashboard from "./pages/UserDashboard.jsx";
 import AdminDashboard from "./pages/AdminDashboard.jsx";
 
+import { Toaster } from 'react-hot-toast';
+
 // Protected Route Component
 const ProtectedAdminRoute = ({ children }) => {
   const isAdminLoggedIn = localStorage.getItem("adminLoggedIn");
@@ -15,26 +17,27 @@ const ProtectedAdminRoute = ({ children }) => {
 function App() {
   return (
     <BrowserRouter>
+      <Toaster position="top-right" />
       <Routes>
         {/* Public Routes */}
         <Route path="/" element={<Register />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
-        
+
         {/* Admin Routes */}
-        <Route 
-          path="/admin/dashboard" 
+        <Route
+          path="/admin/dashboard"
           element={
             <ProtectedAdminRoute>
               <AdminDashboard />
             </ProtectedAdminRoute>
-          } 
+          }
         />
-        
+
         {/* Practitioner Routes */}
         <Route path="/practitioner/onboarding" element={<PractitionerOnboarding />} />
         <Route path="/practitioner/dashboard" element={<PractitionerDashboard />} />
-        
+
         {/* User Routes */}
         <Route path="/user/dashboard" element={<UserDashboard />} />
       </Routes>

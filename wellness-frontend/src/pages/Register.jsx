@@ -1,5 +1,8 @@
 import { Link, useNavigate } from "react-router-dom";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import toast from "react-hot-toast";
+
+import { registerUser, storeAuthData, getAccessToken, getStoredUser } from "../services/authService";
 
 export default function Register() {
   const navigate = useNavigate();
@@ -13,62 +16,11 @@ export default function Register() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Email validation regex
-  const validateEmail = (email) => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
-  };
-
-  // Password validation
-  const validatePassword = (password) => {
-    if (password.length < 6) {
-      return "Password must be at least 6 characters long";
-    }
-    if (password.length > 100) {
-      return "Password must be less than 100 characters";
-    }
-    return null;
-  };
-
-  // Name validation
-  const validateName = (name) => {
-    if (!name || name.trim().length === 0) {
-      return "Full name is required";
-    }
-    if (name.trim().length < 2) {
-      return "Full name must be at least 2 characters";
-    }
-    return null;
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
     setErrors({});
     setLoading(true);
-
-    // Client-side validation
-    const newErrors = {};
-    
-    const nameError = validateName(formData.fullName);
-    if (nameError) {
-      newErrors.fullName = nameError;
-    }
-
-    if (!formData.email || !validateEmail(formData.email)) {
-      newErrors.email = "Please enter a valid email address";
-    }
-
-    const passwordError = validatePassword(formData.password);
-    if (passwordError) {
-      newErrors.password = passwordError;
-    }
-
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
-      setLoading(false);
-      return;
-    }
 
     try {
       const payload = {
@@ -82,7 +34,7 @@ export default function Register() {
       console.log("Sending registration request:", payload);
 
       // Call backend API for registration
-      const response = await fetch("/api/auth/register", {
+      const response = await fetch("http://localhost:8081/api/auth/register", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -95,16 +47,7 @@ export default function Register() {
       console.log("Response data:", data);
 
       if (!response.ok) {
-        // Handle backend validation errors
-        if (data.errors) {
-          const backendErrors = {};
-          Object.keys(data.errors).forEach(key => {
-            if (key === 'name') backendErrors.fullName = data.errors[key];
-            else backendErrors[key] = data.errors[key];
-          });
-          setErrors(backendErrors);
-        }
-        setError(data.message || "Registration failed. Please check your input and try again.");
+        setError(data.message || "Registration failed. Please try again.");
         setLoading(false);
         return;
       }
@@ -123,7 +66,9 @@ export default function Register() {
       }
     } catch (err) {
       console.error("Registration error:", err);
-      setError("Network error: " + err.message);
+      const errorMsg = err.response?.data?.message || err.message || "Registration failed";
+      setError(errorMsg);
+      toast.error(errorMsg, { id: toastId });
     } finally {
       setLoading(false);
     }
@@ -163,9 +108,7 @@ export default function Register() {
           <form className="space-y-5" onSubmit={handleSubmit}>
 
             {error && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-red-800 text-sm">
-                {error}
-              </div>
+              <div className="hidden"></div>
             )}
 
             <div>
@@ -181,14 +124,7 @@ export default function Register() {
                     : 'focus:ring-[#1f6f66]'
                 }`}
                 value={formData.fullName}
-                onChange={(e) => {
-                  setFormData({...formData, fullName: e.target.value});
-                  if (errors.fullName) {
-                    const newErrors = {...errors};
-                    delete newErrors.fullName;
-                    setErrors(newErrors);
-                  }
-                }}
+                onChange={(e) => setFormData({...formData, fullName: e.target.value})}
                 required
               />
               {errors.fullName && (
@@ -209,19 +145,7 @@ export default function Register() {
                     : 'focus:ring-[#1f6f66]'
                 }`}
                 value={formData.email}
-                onChange={(e) => {
-                  setFormData({...formData, email: e.target.value});
-                  if (errors.email) {
-                    const newErrors = {...errors};
-                    delete newErrors.email;
-                    setErrors(newErrors);
-                  }
-                }}
-                onBlur={(e) => {
-                  if (e.target.value && !validateEmail(e.target.value)) {
-                    setErrors({...errors, email: "Please enter a valid email address"});
-                  }
-                }}
+                onChange={(e) => setFormData({...formData, email: e.target.value})}
                 required
               />
               {errors.email && (
@@ -242,20 +166,7 @@ export default function Register() {
                     : 'focus:ring-[#1f6f66]'
                 }`}
                 value={formData.password}
-                onChange={(e) => {
-                  setFormData({...formData, password: e.target.value});
-                  if (errors.password) {
-                    const newErrors = {...errors};
-                    delete newErrors.password;
-                    setErrors(newErrors);
-                  }
-                }}
-                onBlur={(e) => {
-                  const passwordError = validatePassword(e.target.value);
-                  if (passwordError) {
-                    setErrors({...errors, password: passwordError});
-                  }
-                }}
+                onChange={(e) => setFormData({...formData, password: e.target.value})}
                 required
               />
               {errors.password && (
@@ -277,7 +188,7 @@ export default function Register() {
               <select
                 className="w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:ring-[#1f6f66] focus:outline-none"
                 value={formData.role}
-                onChange={(e) => setFormData({...formData, role: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, role: e.target.value })}
               >
                 <option value="PATIENT">Patient/User</option>
                 <option value="PRACTITIONER">Practitioner</option>

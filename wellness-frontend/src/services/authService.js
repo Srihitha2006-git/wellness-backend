@@ -1,73 +1,85 @@
-// TEMPORARY REALISTIC AUTH SYSTEM
+// ============================================
+// AUTH SERVICE - Real Backend API Integration
+// ============================================
 
-const USERS_KEY = "mock_users";
+const API_BASE = "http://localhost:8081/api/auth";
 
-const getUsers = () => {
-  return JSON.parse(localStorage.getItem(USERS_KEY)) || [];
-};
-
-const saveUsers = (users) => {
-  localStorage.setItem(USERS_KEY, JSON.stringify(users));
-};
-
-export const registerUser = (data) => {
-  return new Promise((resolve, reject) => {
-    setTimeout(() => {
-      const users = getUsers();
-
-      const existingUser = users.find(
-        (user) => user.email === data.email
-      );
-
-      if (existingUser) {
-        reject({
-          response: { data: { message: "User already exists" } },
-        });
-        return;
-      }
-
-      users.push({
-        name: data.name,
-        email: data.email,
-        password: data.password, // in real backend this would be hashed
-        role: data.role,
-      });
-
-      saveUsers(users);
-
-      resolve({
-        data: { message: "User registered successfully" },
-      });
-    }, 800);
+// ---- Register New User ----
+export const registerUser = async (data) => {
+  const response = await fetch(`${API_BASE}/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data), // { name, email, password, role, bio }
   });
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw { response: { data: result } };
+  }
+
+  return { data: result };
+  // Returns: { accessToken, refreshToken, user: { id, name, email, role, bio } }
 };
 
-export const loginUser = (data) => {
-  return new Promise((resolve, reject) => {
-    setTimeout(() => {
-      const users = getUsers();
-
-      const user = users.find(
-        (u) =>
-          u.email === data.email &&
-          u.password === data.password
-      );
-
-      if (!user) {
-        reject({
-          response: { data: { message: "Invalid credentials" } },
-        });
-        return;
-      }
-
-      const fakeToken = btoa(user.email + ":" + Date.now());
-
-      resolve({
-        data: {
-          token: fakeToken,
-          role: user.role,
-        },
-      });
-    }, 800);
+// ---- Login Existing User ----
+export const loginUser = async (data) => {
+  const response = await fetch(`${API_BASE}/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data), // { email, password }
   });
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw { response: { data: result } };
+  }
+
+  return { data: result };
+  // Returns: { accessToken, refreshToken, user: { id, name, email, role, bio } }
+};
+
+// ---- Refresh Access Token ----
+export const refreshToken = async (token) => {
+  const response = await fetch(`${API_BASE}/refresh?refreshToken=${token}`, {
+    method: "POST",
+  });
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw { response: { data: result } };
+  }
+
+  return { data: result };
+  // Returns: { accessToken, refreshToken, user: { id, name, email, role, bio } }
+};
+
+// ---- Helper: Store auth data in localStorage ----
+export const storeAuthData = (data) => {
+  localStorage.setItem("user", JSON.stringify(data.user));
+  localStorage.setItem("accessToken", data.accessToken);
+  localStorage.setItem("refreshToken", data.refreshToken);
+  localStorage.setItem("userRole", data.user.role);
+};
+
+// ---- Helper: Clear auth data from localStorage ----
+export const clearAuthData = () => {
+  localStorage.removeItem("user");
+  localStorage.removeItem("accessToken");
+  localStorage.removeItem("refreshToken");
+  localStorage.removeItem("userRole");
+  localStorage.removeItem("adminLoggedIn");
+};
+
+// ---- Helper: Get stored access token ----
+export const getAccessToken = () => {
+  return localStorage.getItem("accessToken");
+};
+
+// ---- Helper: Get stored user ----
+export const getStoredUser = () => {
+  const user = localStorage.getItem("user");
+  return user ? JSON.parse(user) : null;
 };

@@ -1,5 +1,8 @@
 import { Link, useNavigate } from "react-router-dom";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import toast from "react-hot-toast";
+
+import { loginUser, storeAuthData, getAccessToken, getStoredUser } from "../services/authService";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -10,27 +13,21 @@ export default function Login() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const clearAuthStorage = () => {
-    localStorage.removeItem("user");
-    localStorage.removeItem("accessToken");
-    localStorage.removeItem("refreshToken");
-    localStorage.removeItem("userRole");
-    localStorage.removeItem("adminLoggedIn");
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
     setLoading(true);
-    clearAuthStorage();
-
+    
     try {
       const payload = {
         email: credentials.email.trim(),
         password: credentials.password,
       };
 
-      const response = await fetch("/api/auth/login", {
+      console.log("Sending login request:", payload);
+
+      // Call backend API for login
+      const response = await fetch("http://localhost:8081/api/auth/login", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -38,27 +35,18 @@ export default function Login() {
         body: JSON.stringify(payload),
       });
 
-      let data;
-      try {
-        data = await response.json();
-      } catch {
-        clearAuthStorage();
-        setError("Invalid response from server. Please try again.");
+      console.log("Response status:", response.status);
+      const data = await response.json();
+      console.log("Response data:", data);
+
+      if (!response.ok) {
+        const errorData = data;
+        setError(errorData.message || "Invalid email or password");
         setLoading(false);
         return;
       }
 
-      // Only treat as success when backend returns 200 and valid auth payload
-      const success = response.ok && response.status === 200 && data && data.accessToken && data.user;
-
-      if (!success) {
-        clearAuthStorage();
-        setError(data?.message || "Invalid email or password");
-        setLoading(false);
-        return;
-      }
-
-      // Store only after confirmed success from backend
+      // Store user data and tokens
       localStorage.setItem("user", JSON.stringify(data.user));
       localStorage.setItem("accessToken", data.accessToken);
       localStorage.setItem("refreshToken", data.refreshToken);
@@ -107,8 +95,7 @@ export default function Login() {
       }
     } catch (err) {
       console.error("Login error:", err);
-      clearAuthStorage();
-      setError("Could not reach server. Check your connection and try again.");
+      setError("Network error: " + err.message);
     } finally {
       setLoading(false);
     }
@@ -130,7 +117,7 @@ export default function Login() {
           </h1>
 
           <p className="text-lg text-teal-100 mb-8">
-            A secure and intelligent platform designed for practitioners and patients 
+            A secure and intelligent platform designed for practitioners and patients
             to collaborate seamlessly in real time.
           </p>
 
@@ -169,9 +156,8 @@ export default function Login() {
           <form onSubmit={handleSubmit} className="space-y-6">
 
             {error && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-red-800 text-sm">
-                {error}
-              </div>
+              <div className="hidden"></div>
+              // Keeping 'error' state for logic but hiding visual box in favor of Toast
             )}
 
             <div>
@@ -182,7 +168,7 @@ export default function Login() {
                 type="email"
                 placeholder="example@email.com"
                 value={credentials.email}
-                onChange={(e) => setCredentials({...credentials, email: e.target.value})}
+                onChange={(e) => setCredentials({ ...credentials, email: e.target.value })}
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-600 transition"
                 required
               />
@@ -196,7 +182,7 @@ export default function Login() {
                 type="password"
                 placeholder="Enter your password"
                 value={credentials.password}
-                onChange={(e) => setCredentials({...credentials, password: e.target.value})}
+                onChange={(e) => setCredentials({ ...credentials, password: e.target.value })}
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-600 transition"
                 required
               />

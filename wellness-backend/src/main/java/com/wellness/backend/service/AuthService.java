@@ -5,6 +5,8 @@ import com.wellness.backend.dto.UserLoginDTO;
 import com.wellness.backend.dto.UserRegisterDTO;
 import com.wellness.backend.dto.UserDTO;
 import com.wellness.backend.model.User;
+import com.wellness.backend.model.PractitionerProfile;
+import com.wellness.backend.repository.PractitionerProfileRepository;
 import com.wellness.backend.repository.UserRepository;
 import com.wellness.backend.security.JwtService;
 import org.slf4j.Logger;
@@ -26,6 +28,7 @@ public class AuthService {
     private static final Logger logger = LoggerFactory.getLogger(AuthService.class);
 
     private final UserRepository userRepository;
+    private final PractitionerProfileRepository practitionerProfileRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final UserService userService;
@@ -34,8 +37,10 @@ public class AuthService {
     @Autowired
     public AuthService(UserRepository userRepository, PasswordEncoder passwordEncoder,
             JwtService jwtService, UserService userService,
-            EmailService emailService) {
+            EmailService emailService,
+            PractitionerProfileRepository practitionerProfileRepository) {
         this.userRepository = userRepository;
+        this.practitionerProfileRepository = practitionerProfileRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.userService = userService;
@@ -60,6 +65,15 @@ public class AuthService {
 
         // Save user
         User savedUser = userRepository.save(user);
+
+        // Create Practitioner Profile if role is PRACTITIONER
+        if (savedUser.getRole() == User.Role.PRACTITIONER) {
+            PractitionerProfile profile = new PractitionerProfile();
+            profile.setUser(savedUser);
+            profile.setVerified(false); // Default to false
+            profile.setSpecialization("General"); // Default or from DTO if available
+            practitionerProfileRepository.save(profile);
+        }
 
         // Send role-based registration email
         try {
@@ -98,6 +112,16 @@ public class AuthService {
         // Verify password
         if (!passwordEncoder.matches(loginDTO.getPassword(), user.getPassword())) {
             throw new RuntimeException("Invalid email or password");
+        }
+
+        // Check Verification for Practitioners
+        if (user.getRole() == User.Role.PRACTITIONER) {
+            PractitionerProfile profile = practitionerProfileRepository.findByUser_Id(user.getId())
+                    .orElseThrow(() -> new RuntimeException("Practitioner profile not found"));
+
+            if (!Boolean.TRUE.equals(profile.getVerified())) {
+                throw new RuntimeException("Your account is pending admin verification");
+            }
         }
 
         // Generate JWT tokens using email and role
