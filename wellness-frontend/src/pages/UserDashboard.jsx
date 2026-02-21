@@ -122,7 +122,7 @@ export default function UserDashboard() {
               }`}
           >
             <span>🛍️</span>
-            <span>Medicine Orders</span>
+            <span>Orders</span>
           </button>
 
           <button
@@ -215,7 +215,7 @@ export default function UserDashboard() {
                   className="px-5 py-2.5 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-lg text-sm font-semibold hover:shadow-lg transition-all"
                 >
                   <span className="mr-2">🛍️</span>
-                  Order Medicine
+                  Orders
                 </button>
               </div>
             </div>

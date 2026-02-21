@@ -7,6 +7,7 @@ export default function PractitionerDashboard() {
   const [appointmentFilter, setAppointmentFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [isVerified, setIsVerified] = useState(false);
+  const [profileUser, setProfileUser] = useState({ name: '', email: '' });
 
   useEffect(() => {
     // Check if practitioner has completed onboarding
@@ -35,6 +36,15 @@ export default function PractitionerDashboard() {
 
           // Save verification flag from backend
           setIsVerified(!!onboardingStatus.verified);
+
+          // Load user for profile from localStorage
+          try {
+            const userStr = localStorage.getItem('user');
+            if (userStr) {
+              const u = JSON.parse(userStr);
+              setProfileUser({ name: u.name || '', email: u.email || '' });
+            }
+          } catch (_) {}
 
           // Only redirect to onboarding if profile doesn't exist
           // Allow dashboard access even if verification is pending
@@ -72,8 +82,8 @@ export default function PractitionerDashboard() {
   return (
     <div className="flex min-h-screen bg-gray-50">
       {/* Sidebar */}
-      <div className="fixed left-0 top-0 w-64 h-screen bg-gradient-to-b from-slate-900 to-slate-800 text-white">
-        <div className="p-6 border-b border-white/10">
+      <div className="fixed left-0 top-0 w-64 h-screen flex flex-col bg-gradient-to-b from-slate-900 to-slate-800 text-white">
+        <div className="p-6 border-b border-white/10 flex-shrink-0">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 bg-gradient-to-br from-green-500 to-green-600 rounded-lg flex items-center justify-center text-lg">
               🏥
@@ -115,7 +125,7 @@ export default function PractitionerDashboard() {
           </div>
         </div>
 
-        <nav className="py-6">
+        <nav className="py-6 flex-1 flex flex-col">
           <button
             onClick={() => setActiveSection('dashboard')}
             className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-all duration-200 ${
@@ -199,6 +209,35 @@ export default function PractitionerDashboard() {
             <span>⚙️</span>
             <span>Settings</span>
           </button>
+
+          <button
+            onClick={() => setActiveSection('profile')}
+            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-all duration-200 ${
+              activeSection === 'profile'
+                ? 'text-white bg-green-500/15 border-l-4 border-green-500'
+                : 'text-slate-300 hover:bg-white/5'
+            }`}
+          >
+            <span>👤</span>
+            <span>Profile</span>
+          </button>
+
+          <div className="mt-auto pt-4 border-t border-white/10 flex-shrink-0">
+            <button
+              onClick={() => {
+                localStorage.removeItem('user');
+                localStorage.removeItem('accessToken');
+                localStorage.removeItem('refreshToken');
+                localStorage.removeItem('userRole');
+                localStorage.removeItem('adminLoggedIn');
+                navigate('/login');
+              }}
+              className="w-full flex items-center gap-3 px-6 py-3 text-left transition-all duration-200 text-slate-300 hover:bg-red-500/20 hover:text-red-300 rounded-lg"
+            >
+              <span>🚪</span>
+              <span>Logout</span>
+            </button>
+          </div>
         </nav>
       </div>
 
@@ -650,6 +689,49 @@ export default function PractitionerDashboard() {
                 <div className="text-6xl mb-4">💬</div>
                 <h3 className="text-xl font-semibold text-slate-900 mb-2">No messages yet</h3>
                 <p className="text-slate-600 text-sm">Your conversations with patients will appear here</p>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Profile Section */}
+        {activeSection === 'profile' && (
+          <>
+            <div className="mb-8">
+              <h2 className="text-3xl font-bold text-slate-900">My Profile</h2>
+              <p className="text-slate-600 text-sm mt-2">View your practitioner profile</p>
+            </div>
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-8">
+              <div className="flex flex-col items-center text-center mb-8">
+                <div className="w-24 h-24 bg-gradient-to-br from-green-500 to-green-600 rounded-full flex items-center justify-center text-white text-4xl font-bold mb-4">
+                  {profileUser.name ? profileUser.name.trim().split(/\s+/).map(n => n[0]).join('').slice(0, 2).toUpperCase() : 'DR'}
+                </div>
+                <h3 className="text-xl font-semibold text-slate-900">{profileUser.name || 'Practitioner'}</h3>
+                <p className="text-slate-600 text-sm mt-1">{profileUser.email || '—'}</p>
+                <span className={`mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${isVerified ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}>
+                  {isVerified ? '✓ Verified Practitioner' : 'Verification Pending'}
+                </span>
+              </div>
+              <div className="border-t border-slate-200 pt-6">
+                <h4 className="text-lg font-semibold text-slate-900 mb-4">Account Information</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Full Name</p>
+                    <p className="text-slate-900 font-medium mt-1">{profileUser.name || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Email</p>
+                    <p className="text-slate-900 font-medium mt-1">{profileUser.email || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Role</p>
+                    <p className="text-slate-900 font-medium mt-1">Practitioner</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Status</p>
+                    <p className="text-slate-900 font-medium mt-1">{isVerified ? 'Verified' : 'Pending verification'}</p>
+                  </div>
+                </div>
               </div>
             </div>
           </>
