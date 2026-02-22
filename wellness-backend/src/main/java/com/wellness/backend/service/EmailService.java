@@ -74,6 +74,18 @@ public class EmailService {
         sendHtmlEmail(email, subject, htmlContent);
     }
 
+    // ================= PASSWORD RESET EMAIL =================
+
+    /**
+     * Sends a password reset email with a secure reset link.
+     * Link expires after 30 minutes and is single-use.
+     */
+    public void sendPasswordResetEmail(String email, String name, String resetLink) {
+        String subject = "Reset Your " + appName + " Password";
+        String htmlContent = buildPasswordResetTemplate(name, resetLink);
+        sendHtmlEmail(email, subject, htmlContent);
+    }
+
     // ================= CORE SEND METHOD =================
 
     /**
@@ -248,5 +260,77 @@ public class EmailService {
                 </html>
                 """
                 .formatted(name, appName, loginUrl, appName, supportEmail, supportEmail);
+    }
+
+    private String buildPasswordResetTemplate(String name, String resetLink) {
+        return """
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="UTF-8">
+                    <style>
+                        body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #f4f6f9; margin: 0; padding: 0; }
+                        .container { max-width: 600px; margin: 40px auto; background: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+                        .header { background: linear-gradient(135deg, #F57C00, #E65100); padding: 30px; text-align: center; }
+                        .header h1 { color: #ffffff; margin: 0; font-size: 26px; }
+                        .body { padding: 30px; color: #333333; line-height: 1.7; }
+                        .body h2 { color: #E65100; }
+                        .warning { background: #FFF3E0; padding: 18px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #F57C00; }
+                        .warning p { margin: 6px 0; }
+                        .warning strong { color: #E65100; }
+                        .cta { text-align: center; margin: 30px 0; }
+                        .cta a { display: inline-block; background: linear-gradient(135deg, #F57C00, #E65100); color: #ffffff; padding: 16px 40px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px; }
+                        .cta a:hover { opacity: 0.9; }
+                        .expiry { background: #FFEBEE; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #C62828; text-align: center; }
+                        .expiry p { margin: 0; color: #B71C1C; font-weight: bold; }
+                        .footer { background: #f9f9f9; padding: 20px; text-align: center; font-size: 13px; color: #888888; }
+                        .footer a { color: #F57C00; text-decoration: none; }
+                        .divider { border-top: 1px solid #eee; margin: 20px 0; }
+                        code { background: #f5f5f5; padding: 8px 12px; border-radius: 4px; font-family: monospace; }
+                    </style>
+                </head>
+                <body>
+                    <div class="container">
+                        <div class="header">
+                            <h1>Password Reset Request</h1>
+                        </div>
+                        <div class="body">
+                            <h2>Hello, %s! 🔐</h2>
+                            <p>We received a request to reset your password for your <strong>%s</strong> account.</p>
+                            
+                            <div class="warning">
+                                <p><strong>⚠️ Important:</strong> This link is <strong>secure</strong> and can only be used once.</p>
+                                <p>If you did not request a password reset, please ignore this email. Your account is safe.</p>
+                            </div>
+
+                            <p>Click the button below to securely reset your password:</p>
+                            
+                            <div class="cta">
+                                <a href="%s">Reset Your Password →</a>
+                            </div>
+
+                            <div class="divider"></div>
+
+                            <p><strong>Or copy and paste this link in your browser:</strong></p>
+                            <p><code style="word-break: break-all;">%s</code></p>
+
+                            <div class="divider"></div>
+
+                            <div class="expiry">
+                                <p>⏰ This link will expire in <strong>30 minutes</strong></p>
+                            </div>
+
+                            <p>Once you reset your password, you'll be able to log in with your new credentials.</p>
+                            <p><strong>Your password is never shared via email.</strong> We only send secure reset links.</p>
+                        </div>
+                        <div class="footer">
+                            <p>&copy; 2026 %s. All rights reserved.</p>
+                            <p>Need help? Contact us at <a href="mailto:%s">%s</a></p>
+                        </div>
+                    </div>
+                </body>
+                </html>
+                """
+                .formatted(name, appName, resetLink, resetLink, appName, supportEmail, supportEmail);
     }
 }

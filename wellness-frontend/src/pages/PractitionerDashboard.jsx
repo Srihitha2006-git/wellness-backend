@@ -1,5 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
+import axios from 'axios';
+import { getAccessToken } from '../services/authService';
+import { getCurrentUser, updateUser } from '../services/userService';
+import { getRequestsForPractitioner, acceptRequest, rejectRequest, completeRequest, cancelRequest } from '../services/requestService';
+import { getSessionsForPractitioner, getAvailability, setAvailability } from '../services/sessionService';
+import SessionCard from '../components/SessionCard';
+import AvailabilityDayCard from '../components/AvailabilityDayCard';
 
 export default function PractitionerDashboard() {
   const navigate = useNavigate();
@@ -7,17 +15,31 @@ export default function PractitionerDashboard() {
   const [appointmentFilter, setAppointmentFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [isVerified, setIsVerified] = useState(false);
+  const [practitionerProfile, setPractitionerProfile] = useState(null);
+  const [userProfile, setUserProfile] = useState(null);
+  const [requests, setRequests] = useState([]);
+  const [settingsData, setSettingsData] = useState({
+    name: '', specialization: '', experience: '', qualifications: '',
+    email: '', phone: ''
+  });
+  const [savingSettings, setSavingSettings] = useState(false);
+  // Sessions & availability state
+  const [practSessions, setPractSessions] = useState([]);
+  const [loadingSessions, setLoadingSessions] = useState(false);
+  const [availability, setAvailabilityState] = useState([]);
+  const [savingAvail, setSavingAvail] = useState(false);
+  const DAYS = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'];
 
   useEffect(() => {
-    // Check if practitioner has completed onboarding
-    const checkOnboardingStatus = async () => {
+    const initDashboard = async () => {
       try {
-        const accessToken = localStorage.getItem('accessToken');
+        const accessToken = getAccessToken();
         if (!accessToken) {
           navigate('/login');
           return;
         }
 
+        // Check onboarding status
         const response = await fetch(
           '/api/practitioners/me/onboarding-status',
           {
@@ -31,32 +53,169 @@ export default function PractitionerDashboard() {
 
         if (response.ok) {
           const onboardingStatus = await response.json();
-          console.log('Onboarding status:', onboardingStatus);
-
-          // Save verification flag from backend
           setIsVerified(!!onboardingStatus.verified);
 
-          // Only redirect to onboarding if profile doesn't exist
-          // Allow dashboard access even if verification is pending
           if (!onboardingStatus.profileExists) {
             navigate('/practitioner/onboarding');
             return;
           }
+
+          // Fetch user profile
+          let userId = null;
+          let userName = '';
+          let userEmail = '';
+          let userPhone = '';
+          try {
+            const user = await getCurrentUser();
+            setUserProfile(user);
+            userId = user.id;
+            userName = user.name || '';
+            userEmail = user.email || '';
+            userPhone = user.phone || '';
+          } catch (err) {
+            console.error('Error fetching user profile:', err);
+          }
+
+          // Fetch full practitioner profile using user ID
+          let practProfile = null;
+          if (userId) {
+            try {
+              const practRes = await axios.get(`/api/practitioners/user/${userId}`, {
+                headers: { Authorization: `Bearer ${accessToken}` }
+              });
+              practProfile = practRes.data;
+              setPractitionerProfile(practProfile);
+              setSettingsData({
+                name: userName || practProfile.userName || '',
+                specialization: practProfile.specialization || '',
+                experience: practProfile.experience || '',
+                qualifications: practProfile.qualifications || '',
+                email: userEmail,
+                phone: userPhone
+              });
+            } catch (err) {
+              console.error('Error fetching practitioner profile:', err);
+              // Still set user data in settings even if practitioner fetch fails
+              setSettingsData(prev => ({
+                ...prev,
+                name: userName,
+                email: userEmail,
+                phone: userPhone
+              }));
+            }
+          }
+
+          // Fetch requests for this practitioner
+          const practId = practProfile?.id || practProfile?.practitionerId;
+          if (practId) {
+            try {
+              const reqData = await getRequestsForPractitioner(practId);
+              setRequests(Array.isArray(reqData) ? reqData : (reqData.data || []));
+            } catch (err) {
+              console.error('Error fetching requests:', err);
+            }
+          }
         } else {
-          // If status check fails, redirect to onboarding
           navigate('/practitioner/onboarding');
           return;
         }
 
         setLoading(false);
       } catch (err) {
-        console.error('Error checking onboarding status:', err);
+        console.error('Error initializing dashboard:', err);
         navigate('/practitioner/onboarding');
       }
     };
 
-    checkOnboardingStatus();
+    initDashboard();
   }, [navigate]);
+
+  // Derived stats from requests
+  const uniquePatients = [...new Map(requests.map(r => [r.userId, r])).values()];
+  const pendingRequests = requests.filter(r => r.status === 'PENDING');
+  const completedRequests = requests.filter(r => r.status === 'COMPLETED');
+  const acceptedRequests = requests.filter(r => r.status === 'ACCEPTED');
+
+  // Handle request status changes
+  const handleAcceptRequest = async (requestId) => {
+    try {
+      await acceptRequest(requestId);
+      setRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: 'ACCEPTED' } : r));
+      toast.success('Request accepted');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to accept request');
+    }
+  };
+
+  const handleCompleteRequest = async (requestId) => {
+    try {
+      await completeRequest(requestId);
+      setRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: 'COMPLETED' } : r));
+      toast.success('Request marked as completed');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to complete request');
+    }
+  };
+
+  const handleRejectRequest = async (requestId) => {
+    try {
+      await rejectRequest(requestId);
+      setRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: 'REJECTED' } : r));
+      toast.success('Request rejected');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to reject request');
+    }
+  };
+
+  const handleSaveSettings = async () => {
+    setSavingSettings(true);
+    try {
+      // Update user profile
+      if (userProfile?.id) {
+        await updateUser(userProfile.id, {
+          name: settingsData.name,
+          phone: settingsData.phone || null
+        });
+      }
+      // Update practitioner profile
+      if (practitionerProfile?.id) {
+        await axios.put(`/api/practitioners/${practitionerProfile.id}`, {
+          specialization: settingsData.specialization,
+          experience: settingsData.experience,
+          qualifications: settingsData.qualifications
+        }, {
+          headers: { Authorization: `Bearer ${getAccessToken()}` }
+        });
+      }
+      toast.success('Settings saved successfully!');
+    } catch (err) {
+      console.error('Error saving settings:', err);
+      toast.error(err.response?.data?.message || 'Failed to save settings');
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
+  // Fetch sessions when sessions section is opened
+  useEffect(() => {
+    if (activeSection === 'sessions' && practitionerProfile?.id) {
+      setLoadingSessions(true);
+      getSessionsForPractitioner(practitionerProfile.id)
+        .then(data => setPractSessions(data))
+        .catch(err => console.error('Failed to load sessions:', err))
+        .finally(() => setLoadingSessions(false));
+    }
+  }, [activeSection, practitionerProfile?.id]);
+
+  // Fetch availability when availability section is opened
+  useEffect(() => {
+    if (activeSection === 'availability' && practitionerProfile?.id) {
+      getAvailability(practitionerProfile.id)
+        .then(data => setAvailabilityState(data))
+        .catch(err => console.error('Failed to load availability:', err));
+    }
+  }, [activeSection, practitionerProfile?.id]);
+
 
   if (loading) {
     return (
@@ -82,11 +241,10 @@ export default function PractitionerDashboard() {
           </div>
           {/* Verification Badge */}
           <div
-            className={`mt-4 flex items-center gap-2 rounded-lg p-2 border ${
-              isVerified
-                ? 'bg-green-500/10 border-green-500/30'
-                : 'bg-amber-500/10 border-amber-500/30'
-            }`}
+            className={`mt-4 flex items-center gap-2 rounded-lg p-2 border ${isVerified
+              ? 'bg-green-500/10 border-green-500/30'
+              : 'bg-amber-500/10 border-amber-500/30'
+              }`}
           >
             <svg
               className={`w-5 h-5 ${isVerified ? 'text-green-500' : 'text-amber-500'}`}
@@ -106,9 +264,8 @@ export default function PractitionerDashboard() {
               />
             </svg>
             <span
-              className={`text-xs font-semibold ${
-                isVerified ? 'text-green-400' : 'text-amber-300'
-              }`}
+              className={`text-xs font-semibold ${isVerified ? 'text-green-400' : 'text-amber-300'
+                }`}
             >
               {isVerified ? 'Verified Practitioner' : 'Verification Pending'}
             </span>
@@ -118,11 +275,10 @@ export default function PractitionerDashboard() {
         <nav className="py-6">
           <button
             onClick={() => setActiveSection('dashboard')}
-            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-all duration-200 ${
-              activeSection === 'dashboard'
-                ? 'text-white bg-green-500/15 border-l-4 border-green-500'
-                : 'text-slate-300 hover:bg-white/5'
-            }`}
+            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-all duration-200 ${activeSection === 'dashboard'
+              ? 'text-white bg-green-500/15 border-l-4 border-green-500'
+              : 'text-slate-300 hover:bg-white/5'
+              }`}
           >
             <span>📊</span>
             <span>Dashboard</span>
@@ -130,11 +286,10 @@ export default function PractitionerDashboard() {
 
           <button
             onClick={() => setActiveSection('appointments')}
-            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-all duration-200 ${
-              activeSection === 'appointments'
-                ? 'text-white bg-green-500/15 border-l-4 border-green-500'
-                : 'text-slate-300 hover:bg-white/5'
-            }`}
+            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-all duration-200 ${activeSection === 'appointments'
+              ? 'text-white bg-green-500/15 border-l-4 border-green-500'
+              : 'text-slate-300 hover:bg-white/5'
+              }`}
           >
             <span>📅</span>
             <span>Appointments</span>
@@ -142,11 +297,10 @@ export default function PractitionerDashboard() {
 
           <button
             onClick={() => setActiveSection('patients')}
-            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-all duration-200 ${
-              activeSection === 'patients'
-                ? 'text-white bg-green-500/15 border-l-4 border-green-500'
-                : 'text-slate-300 hover:bg-white/5'
-            }`}
+            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-all duration-200 ${activeSection === 'patients'
+              ? 'text-white bg-green-500/15 border-l-4 border-green-500'
+              : 'text-slate-300 hover:bg-white/5'
+              }`}
           >
             <span>👥</span>
             <span>My Patients</span>
@@ -154,23 +308,43 @@ export default function PractitionerDashboard() {
 
           <button
             onClick={() => setActiveSection('schedule')}
-            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-all duration-200 ${
-              activeSection === 'schedule'
-                ? 'text-white bg-green-500/15 border-l-4 border-green-500'
-                : 'text-slate-300 hover:bg-white/5'
-            }`}
+            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-all duration-200 ${activeSection === 'schedule'
+              ? 'text-white bg-green-500/15 border-l-4 border-green-500'
+              : 'text-slate-300 hover:bg-white/5'
+              }`}
           >
             <span>🗓️</span>
             <span>Schedule</span>
           </button>
 
           <button
+            onClick={() => setActiveSection('sessions')}
+            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-all duration-200 ${activeSection === 'sessions'
+              ? 'text-white bg-green-500/15 border-l-4 border-green-500'
+              : 'text-slate-300 hover:bg-white/5'
+              }`}
+          >
+            <span>📅</span>
+            <span>Sessions</span>
+          </button>
+
+          <button
+            onClick={() => setActiveSection('availability')}
+            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-all duration-200 ${activeSection === 'availability'
+              ? 'text-white bg-green-500/15 border-l-4 border-green-500'
+              : 'text-slate-300 hover:bg-white/5'
+              }`}
+          >
+            <span>🗓️</span>
+            <span>Availability</span>
+          </button>
+
+          <button
             onClick={() => setActiveSection('earnings')}
-            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-all duration-200 ${
-              activeSection === 'earnings'
-                ? 'text-white bg-green-500/15 border-l-4 border-green-500'
-                : 'text-slate-300 hover:bg-white/5'
-            }`}
+            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-all duration-200 ${activeSection === 'earnings'
+              ? 'text-white bg-green-500/15 border-l-4 border-green-500'
+              : 'text-slate-300 hover:bg-white/5'
+              }`}
           >
             <span>💰</span>
             <span>Earnings</span>
@@ -178,11 +352,10 @@ export default function PractitionerDashboard() {
 
           <button
             onClick={() => setActiveSection('messages')}
-            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-all duration-200 ${
-              activeSection === 'messages'
-                ? 'text-white bg-green-500/15 border-l-4 border-green-500'
-                : 'text-slate-300 hover:bg-white/5'
-            }`}
+            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-all duration-200 ${activeSection === 'messages'
+              ? 'text-white bg-green-500/15 border-l-4 border-green-500'
+              : 'text-slate-300 hover:bg-white/5'
+              }`}
           >
             <span>💬</span>
             <span>Messages</span>
@@ -190,11 +363,10 @@ export default function PractitionerDashboard() {
 
           <button
             onClick={() => setActiveSection('settings')}
-            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-all duration-200 ${
-              activeSection === 'settings'
-                ? 'text-white bg-green-500/15 border-l-4 border-green-500'
-                : 'text-slate-300 hover:bg-white/5'
-            }`}
+            className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-all duration-200 ${activeSection === 'settings'
+              ? 'text-white bg-green-500/15 border-l-4 border-green-500'
+              : 'text-slate-300 hover:bg-white/5'
+              }`}
           >
             <span>⚙️</span>
             <span>Settings</span>
@@ -236,39 +408,37 @@ export default function PractitionerDashboard() {
               <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all cursor-pointer">
                 <div className="flex justify-between items-start mb-4">
                   <div>
-                    <div className="text-3xl font-bold text-slate-900">24</div>
+                    <div className="text-3xl font-bold text-slate-900">{uniquePatients.length}</div>
                     <div className="text-sm text-slate-600 font-medium">Total Patients</div>
                   </div>
                   <div className="w-12 h-12 bg-gradient-to-br from-blue-100 to-blue-200 rounded-xl flex items-center justify-center text-2xl">
                     👥
                   </div>
                 </div>
-                <div className="flex items-center gap-1 text-xs text-green-600">
-                  <span>↑ 3</span>
-                  <span>new this month</span>
+                <div className="flex items-center gap-1 text-xs text-slate-600">
+                  <span>From {requests.length} total requests</span>
                 </div>
               </div>
 
               <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all cursor-pointer">
                 <div className="flex justify-between items-start mb-4">
                   <div>
-                    <div className="text-3xl font-bold text-slate-900">8</div>
-                    <div className="text-sm text-slate-600 font-medium">Today's Sessions</div>
+                    <div className="text-3xl font-bold text-slate-900">{pendingRequests.length}</div>
+                    <div className="text-sm text-slate-600 font-medium">Pending Requests</div>
                   </div>
                   <div className="w-12 h-12 bg-gradient-to-br from-purple-100 to-purple-200 rounded-xl flex items-center justify-center text-2xl">
-                    📅
+                    📋
                   </div>
                 </div>
                 <div className="flex items-center gap-1 text-xs text-blue-600">
-                  <span>→</span>
-                  <span>2 upcoming</span>
+                  <span>{acceptedRequests.length} accepted</span>
                 </div>
               </div>
 
               <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all cursor-pointer">
                 <div className="flex justify-between items-start mb-4">
                   <div>
-                    <div className="text-3xl font-bold text-slate-900">4.8</div>
+                    <div className="text-3xl font-bold text-slate-900">{practitionerProfile?.rating?.toFixed(1) || 'N/A'}</div>
                     <div className="text-sm text-slate-600 font-medium">Rating</div>
                   </div>
                   <div className="w-12 h-12 bg-gradient-to-br from-yellow-100 to-yellow-200 rounded-xl flex items-center justify-center text-2xl">
@@ -277,63 +447,65 @@ export default function PractitionerDashboard() {
                 </div>
                 <div className="flex items-center gap-1 text-xs text-slate-600">
                   <span>—</span>
-                  <span>from 150 reviews</span>
+                  <span>{completedRequests.length} completed sessions</span>
                 </div>
               </div>
 
               <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-all cursor-pointer">
                 <div className="flex justify-between items-start mb-4">
                   <div>
-                    <div className="text-3xl font-bold text-slate-900">$2,450</div>
-                    <div className="text-sm text-slate-600 font-medium">This Month</div>
+                    <div className="text-3xl font-bold text-slate-900">{completedRequests.length}</div>
+                    <div className="text-sm text-slate-600 font-medium">Completed</div>
                   </div>
                   <div className="w-12 h-12 bg-gradient-to-br from-green-100 to-green-200 rounded-xl flex items-center justify-center text-2xl">
-                    💰
+                    ✅
                   </div>
                 </div>
                 <div className="flex items-center gap-1 text-xs text-green-600">
-                  <span>↑ 12%</span>
-                  <span>vs last month</span>
+                  <span>Total completed requests</span>
                 </div>
               </div>
             </div>
 
             {/* Quick Overview Cards */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Today's Schedule */}
+              {/* Recent Requests */}
               <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
-                <h3 className="text-lg font-semibold text-slate-900 mb-4">Today's Schedule</h3>
+                <h3 className="text-lg font-semibold text-slate-900 mb-4">Recent Requests</h3>
                 <div className="space-y-3">
-                  {[
-                    { patient: 'John Smith', time: '10:00 AM', type: 'Video Call', status: 'upcoming' },
-                    { patient: 'Sarah Johnson', time: '11:30 AM', type: 'In-Person', status: 'upcoming' },
-                    { patient: 'Michael Brown', time: '2:00 PM', type: 'Video Call', status: 'completed' },
-                    { patient: 'Emily Davis', time: '3:30 PM', type: 'In-Person', status: 'upcoming' },
-                  ].map((appointment, idx) => (
-                    <div key={idx} className="p-4 bg-slate-50 rounded-lg border border-slate-200 hover:bg-white hover:shadow-sm transition-all">
+                  {requests.length === 0 ? (
+                    <div className="text-center py-8 text-slate-500">
+                      <div className="text-4xl mb-2">📋</div>
+                      <p className="text-sm">No requests yet</p>
+                    </div>
+                  ) : requests.slice(0, 4).map((req) => (
+                    <div key={req.id} className="p-4 bg-slate-50 rounded-lg border border-slate-200 hover:bg-white hover:shadow-sm transition-all">
                       <div className="flex justify-between items-center mb-2">
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold text-sm">
-                            {appointment.patient.split(' ').map(n => n[0]).join('')}
+                            {(req.userName || 'U').split(' ').map(n => n[0]).join('')}
                           </div>
                           <div>
-                            <h4 className="text-sm font-semibold text-slate-900">{appointment.patient}</h4>
-                            <p className="text-xs text-slate-600">{appointment.type}</p>
+                            <h4 className="text-sm font-semibold text-slate-900">{req.userName || 'Patient'}</h4>
+                            <p className="text-xs text-slate-600">{req.description || 'No description'}</p>
                           </div>
                         </div>
-                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                          appointment.status === 'upcoming' 
-                            ? 'bg-blue-100 text-blue-800' 
-                            : 'bg-green-100 text-green-800'
-                        }`}>
-                          {appointment.status === 'upcoming' ? appointment.time : 'Completed'}
+                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${req.status === 'PENDING' ? 'bg-amber-100 text-amber-800' :
+                          req.status === 'ACCEPTED' ? 'bg-blue-100 text-blue-800' :
+                            req.status === 'COMPLETED' ? 'bg-green-100 text-green-800' :
+                              'bg-red-100 text-red-800'
+                          }`}>
+                          {req.status}
                         </span>
                       </div>
                     </div>
                   ))}
                 </div>
-                <button className="w-full mt-4 py-2.5 bg-slate-100 text-slate-700 rounded-lg font-semibold hover:bg-slate-200 transition-all">
-                  View Full Schedule
+                <button
+                  onClick={() => setActiveSection('appointments')}
+                  className="w-full mt-4 py-2.5 bg-slate-100 text-slate-700 rounded-lg font-semibold hover:bg-slate-200 transition-all"
+                >
+                  View All Requests
                 </button>
               </div>
 
@@ -341,19 +513,21 @@ export default function PractitionerDashboard() {
               <div className="bg-gradient-to-br from-green-50 to-emerald-50 border border-green-200 rounded-xl p-6">
                 <h3 className="text-lg font-semibold text-green-900 mb-4">Recent Activity</h3>
                 <div className="space-y-3">
-                  {[
-                    { action: 'New patient registered', patient: 'Alice Cooper', time: '2 hours ago', icon: '👤' },
-                    { action: 'Session completed', patient: 'Bob Wilson', time: '4 hours ago', icon: '✅' },
-                    { action: 'Appointment scheduled', patient: 'Carol Martinez', time: '5 hours ago', icon: '📅' },
-                    { action: 'Payment received', patient: 'David Lee', time: '1 day ago', icon: '💳' },
-                  ].map((activity, idx) => (
-                    <div key={idx} className="flex items-center gap-3 p-3 bg-white rounded-lg border border-green-200">
+                  {requests.length === 0 ? (
+                    <div className="text-center py-8 text-green-700">
+                      <div className="text-4xl mb-2">📭</div>
+                      <p className="text-sm">No activity yet</p>
+                    </div>
+                  ) : requests.slice(0, 4).map((req) => (
+                    <div key={req.id} className="flex items-center gap-3 p-3 bg-white rounded-lg border border-green-200">
                       <div className="w-10 h-10 bg-gradient-to-br from-green-100 to-emerald-100 rounded-full flex items-center justify-center text-xl">
-                        {activity.icon}
+                        {req.status === 'COMPLETED' ? '✅' : req.status === 'ACCEPTED' ? '📅' : req.status === 'PENDING' ? '🔔' : '❌'}
                       </div>
                       <div className="flex-1">
-                        <p className="text-sm font-semibold text-slate-900">{activity.action}</p>
-                        <p className="text-xs text-slate-600">{activity.patient} • {activity.time}</p>
+                        <p className="text-sm font-semibold text-slate-900">
+                          {req.status === 'PENDING' ? 'New request' : req.status === 'ACCEPTED' ? 'Request accepted' : req.status === 'COMPLETED' ? 'Session completed' : 'Request ' + req.status.toLowerCase()}
+                        </p>
+                        <p className="text-xs text-slate-600">{req.userName || 'Patient'} • {req.createdAt ? new Date(req.createdAt).toLocaleDateString() : 'Recently'}</p>
                       </div>
                     </div>
                   ))}
@@ -379,11 +553,10 @@ export default function PractitionerDashboard() {
                     <button
                       key={filter}
                       onClick={() => setAppointmentFilter(filter.toLowerCase())}
-                      className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
-                        appointmentFilter === filter.toLowerCase()
-                          ? 'bg-green-500 text-white'
-                          : 'bg-slate-100 text-slate-600 hover:bg-green-500 hover:text-white'
-                      }`}
+                      className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${appointmentFilter === filter.toLowerCase()
+                        ? 'bg-green-500 text-white'
+                        : 'bg-slate-100 text-slate-600 hover:bg-green-500 hover:text-white'
+                        }`}
                     >
                       {filter}
                     </button>
@@ -391,53 +564,68 @@ export default function PractitionerDashboard() {
                 </div>
               </div>
               <div className="p-6 space-y-4">
-                {[
-                  { patient: 'John Smith', date: 'Feb 15, 2026', time: '10:00 AM', type: 'Video Call', status: 'upcoming', concern: 'Follow-up consultation' },
-                  { patient: 'Sarah Johnson', date: 'Feb 15, 2026', time: '11:30 AM', type: 'In-Person', status: 'upcoming', concern: 'Initial assessment' },
-                  { patient: 'Michael Brown', date: 'Feb 14, 2026', time: '2:00 PM', type: 'Video Call', status: 'completed', concern: 'Therapy session' },
-                  { patient: 'Emily Davis', date: 'Feb 13, 2026', time: '3:30 PM', type: 'In-Person', status: 'completed', concern: 'Progress review' },
-                ].map((appointment, idx) => (
-                  <div key={idx} className="p-5 bg-slate-50 rounded-lg border border-slate-200 hover:bg-white hover:shadow-md transition-all">
-                    <div className="flex justify-between items-start mb-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold">
-                          {appointment.patient.split(' ').map(n => n[0]).join('')}
-                        </div>
-                        <div>
-                          <h4 className="text-base font-semibold text-slate-900">{appointment.patient}</h4>
-                          <p className="text-sm text-slate-600">{appointment.concern}</p>
-                        </div>
-                      </div>
-                      <span className={`px-3 py-1 rounded-full text-xs font-semibold uppercase ${
-                        appointment.status === 'upcoming' 
-                          ? 'bg-blue-100 text-blue-800' 
-                          : 'bg-green-100 text-green-800'
-                      }`}>
-                        {appointment.status}
-                      </span>
-                    </div>
-                    <div className="flex gap-6 text-sm text-slate-600 mb-4">
-                      <span className="flex items-center gap-1">📅 {appointment.date}</span>
-                      <span className="flex items-center gap-1">🕐 {appointment.time}</span>
-                      <span className="flex items-center gap-1">📍 {appointment.type}</span>
-                    </div>
-                    {appointment.status === 'upcoming' && (
-                      <div className="flex gap-2">
-                        <button className="flex-1 py-2.5 bg-green-500 text-white rounded-lg font-semibold hover:bg-green-600 transition-all">
-                          Start Session
-                        </button>
-                        <button className="px-4 py-2.5 bg-slate-200 text-slate-700 rounded-lg font-semibold hover:bg-slate-300 transition-all">
-                          Reschedule
-                        </button>
-                      </div>
-                    )}
-                    {appointment.status === 'completed' && (
-                      <button className="w-full py-2.5 bg-slate-200 text-slate-700 rounded-lg font-semibold hover:bg-slate-300 transition-all">
-                        View Notes
-                      </button>
-                    )}
+                {requests.length === 0 ? (
+                  <div className="text-center py-12">
+                    <div className="text-5xl mb-4">📋</div>
+                    <h4 className="text-lg font-semibold text-slate-900 mb-2">No requests yet</h4>
+                    <p className="text-slate-600 text-sm">Patient requests will appear here</p>
                   </div>
-                ))}
+                ) : requests
+                  .filter(r => appointmentFilter === 'all' || r.status === appointmentFilter.toUpperCase())
+                  .map((req) => (
+                    <div key={req.id} className="p-5 bg-slate-50 rounded-lg border border-slate-200 hover:bg-white hover:shadow-md transition-all">
+                      <div className="flex justify-between items-start mb-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold">
+                            {(req.userName || 'U').split(' ').map(n => n[0]).join('')}
+                          </div>
+                          <div>
+                            <h4 className="text-base font-semibold text-slate-900">{req.userName || 'Patient'}</h4>
+                            <p className="text-sm text-slate-600">{req.description || 'No description'}</p>
+                          </div>
+                        </div>
+                        <span className={`px-3 py-1 rounded-full text-xs font-semibold uppercase ${req.status === 'PENDING' ? 'bg-amber-100 text-amber-800' :
+                          req.status === 'ACCEPTED' ? 'bg-blue-100 text-blue-800' :
+                            req.status === 'COMPLETED' ? 'bg-green-100 text-green-800' :
+                              'bg-red-100 text-red-800'
+                          }`}>
+                          {req.status}
+                        </span>
+                      </div>
+                      <div className="flex gap-6 text-sm text-slate-600 mb-4">
+                        <span className="flex items-center gap-1">📅 {req.createdAt ? new Date(req.createdAt).toLocaleDateString() : 'N/A'}</span>
+                        <span className="flex items-center gap-1">🔖 {req.priority || 'MEDIUM'}</span>
+                        <span className="flex items-center gap-1">📧 {req.userEmail || ''}</span>
+                      </div>
+                      {req.status === 'PENDING' && (
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleAcceptRequest(req.id)}
+                            className="flex-1 py-2.5 bg-green-500 text-white rounded-lg font-semibold hover:bg-green-600 transition-all"
+                          >
+                            Accept
+                          </button>
+                          <button
+                            onClick={() => handleRejectRequest(req.id)}
+                            className="px-4 py-2.5 bg-red-100 text-red-700 rounded-lg font-semibold hover:bg-red-200 transition-all"
+                          >
+                            Reject
+                          </button>
+                        </div>
+                      )}
+                      {req.status === 'ACCEPTED' && (
+                        <button
+                          onClick={() => handleCompleteRequest(req.id)}
+                          className="w-full py-2.5 bg-green-500 text-white rounded-lg font-semibold hover:bg-green-600 transition-all"
+                        >
+                          Mark as Completed
+                        </button>
+                      )}
+                      {(req.status === 'COMPLETED' || req.status === 'REJECTED' || req.status === 'CANCELLED') && (
+                        <div className="text-sm text-slate-500 italic">This request is {req.status.toLowerCase()}</div>
+                      )}
+                    </div>
+                  ))}
               </div>
             </div>
           </>
@@ -466,40 +654,40 @@ export default function PractitionerDashboard() {
                 </div>
               </div>
               <div className="p-6 space-y-4">
-                {[
-                  { name: 'John Smith', age: 32, lastVisit: 'Feb 14, 2026', totalSessions: 8, status: 'active' },
-                  { name: 'Sarah Johnson', age: 28, lastVisit: 'Feb 13, 2026', totalSessions: 12, status: 'active' },
-                  { name: 'Michael Brown', age: 45, lastVisit: 'Feb 10, 2026', totalSessions: 5, status: 'active' },
-                  { name: 'Emily Davis', age: 38, lastVisit: 'Jan 28, 2026', totalSessions: 15, status: 'inactive' },
-                ].map((patient, idx) => (
-                  <div key={idx} className="p-5 bg-slate-50 rounded-lg border border-slate-200 hover:bg-white hover:shadow-md transition-all">
-                    <div className="flex justify-between items-start">
-                      <div className="flex items-center gap-4">
-                        <div className="w-14 h-14 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold text-lg">
-                          {patient.name.split(' ').map(n => n[0]).join('')}
-                        </div>
-                        <div>
-                          <h4 className="text-base font-semibold text-slate-900">{patient.name}</h4>
-                          <div className="flex gap-4 text-sm text-slate-600 mt-1">
-                            <span>Age: {patient.age}</span>
-                            <span>•</span>
-                            <span>{patient.totalSessions} sessions</span>
-                            <span>•</span>
-                            <span>Last visit: {patient.lastVisit}</span>
+                {uniquePatients.length === 0 ? (
+                  <div className="text-center py-12">
+                    <div className="text-5xl mb-4">👥</div>
+                    <h4 className="text-lg font-semibold text-slate-900 mb-2">No patients yet</h4>
+                    <p className="text-slate-600 text-sm">Once patients send you requests, they will appear here</p>
+                  </div>
+                ) : uniquePatients.map((patient) => {
+                  const patientRequests = requests.filter(r => r.userId === patient.userId);
+                  const lastRequest = patientRequests[patientRequests.length - 1];
+                  return (
+                    <div key={patient.userId} className="p-5 bg-slate-50 rounded-lg border border-slate-200 hover:bg-white hover:shadow-md transition-all">
+                      <div className="flex justify-between items-start">
+                        <div className="flex items-center gap-4">
+                          <div className="w-14 h-14 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold text-lg">
+                            {(patient.userName || 'U').split(' ').map(n => n[0]).join('')}
+                          </div>
+                          <div>
+                            <h4 className="text-base font-semibold text-slate-900">{patient.userName || 'Patient'}</h4>
+                            <div className="flex gap-4 text-sm text-slate-600 mt-1">
+                              <span>{patientRequests.length} request{patientRequests.length !== 1 ? 's' : ''}</span>
+                              <span>•</span>
+                              <span>Last: {lastRequest?.createdAt ? new Date(lastRequest.createdAt).toLocaleDateString() : 'N/A'}</span>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                      <div className="flex gap-2">
-                        <button className="px-4 py-2 bg-green-500 text-white rounded-lg text-sm font-semibold hover:bg-green-600 transition-all">
-                          View Profile
-                        </button>
-                        <button className="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg text-sm font-semibold hover:bg-slate-300 transition-all">
-                          Schedule
-                        </button>
+                        <div className="flex gap-2">
+                          <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-semibold">
+                            {patient.userEmail}
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </>
@@ -521,14 +709,14 @@ export default function PractitionerDashboard() {
                     <div key={idx} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
                       <span className="text-sm font-medium text-slate-900">{day}</span>
                       <div className="flex items-center gap-3">
-                        <input 
-                          type="time" 
+                        <input
+                          type="time"
                           className="px-3 py-1 border border-slate-300 rounded text-sm"
                           defaultValue="09:00"
                         />
                         <span className="text-slate-600">to</span>
-                        <input 
-                          type="time" 
+                        <input
+                          type="time"
                           className="px-3 py-1 border border-slate-300 rounded text-sm"
                           defaultValue="17:00"
                         />
@@ -624,9 +812,8 @@ export default function PractitionerDashboard() {
                     </div>
                     <div className="text-right">
                       <p className="text-base font-bold text-slate-900">${transaction.amount}</p>
-                      <span className={`text-xs font-semibold ${
-                        transaction.status === 'completed' ? 'text-green-600' : 'text-blue-600'
-                      }`}>
+                      <span className={`text-xs font-semibold ${transaction.status === 'completed' ? 'text-green-600' : 'text-blue-600'
+                        }`}>
                         {transaction.status}
                       </span>
                     </div>
@@ -670,19 +857,39 @@ export default function PractitionerDashboard() {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-2">Full Name</label>
-                      <input type="text" className="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm" placeholder="Dr. John Doe" />
+                      <input
+                        type="text"
+                        value={settingsData.name}
+                        onChange={(e) => setSettingsData({ ...settingsData, name: e.target.value })}
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm"
+                      />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-2">Specialization</label>
-                      <input type="text" className="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm" placeholder="Ayurveda" />
+                      <input
+                        type="text"
+                        value={settingsData.specialization}
+                        onChange={(e) => setSettingsData({ ...settingsData, specialization: e.target.value })}
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm"
+                      />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-2">License Number</label>
-                      <input type="text" className="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm" placeholder="LIC-12345" />
+                      <label className="block text-sm font-medium text-slate-700 mb-2">Qualifications</label>
+                      <input
+                        type="text"
+                        value={settingsData.qualifications}
+                        onChange={(e) => setSettingsData({ ...settingsData, qualifications: e.target.value })}
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm"
+                      />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-2">Experience (years)</label>
-                      <input type="number" className="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm" placeholder="5" />
+                      <label className="block text-sm font-medium text-slate-700 mb-2">Experience</label>
+                      <input
+                        type="text"
+                        value={settingsData.experience}
+                        onChange={(e) => setSettingsData({ ...settingsData, experience: e.target.value })}
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm"
+                      />
                     </div>
                   </div>
                 </div>
@@ -692,11 +899,22 @@ export default function PractitionerDashboard() {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-2">Email</label>
-                      <input type="email" className="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm" placeholder="doctor@example.com" />
+                      <input
+                        type="email"
+                        value={settingsData.email}
+                        disabled
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm bg-slate-100 cursor-not-allowed"
+                      />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-slate-700 mb-2">Phone</label>
-                      <input type="tel" className="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm" placeholder="+1 234 567 8900" />
+                      <input
+                        type="tel"
+                        value={settingsData.phone}
+                        onChange={(e) => setSettingsData({ ...settingsData, phone: e.target.value })}
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg text-sm"
+                        placeholder="+1 234 567 8900"
+                      />
                     </div>
                   </div>
                 </div>
@@ -704,8 +922,12 @@ export default function PractitionerDashboard() {
                 <div>
                   <h4 className="text-lg font-semibold text-slate-900 mb-4">Account Actions</h4>
                   <div className="space-y-3">
-                    <button className="w-full px-4 py-3 bg-green-500 text-white rounded-lg font-semibold hover:bg-green-600 transition-all">
-                      Save Changes
+                    <button
+                      onClick={handleSaveSettings}
+                      disabled={savingSettings}
+                      className="w-full px-4 py-3 bg-green-500 text-white rounded-lg font-semibold hover:bg-green-600 transition-all disabled:opacity-50"
+                    >
+                      {savingSettings ? 'Saving...' : 'Save Changes'}
                     </button>
                     <button className="w-full px-4 py-3 bg-slate-200 text-slate-700 rounded-lg font-semibold hover:bg-slate-300 transition-all">
                       Change Password
@@ -713,6 +935,77 @@ export default function PractitionerDashboard() {
                   </div>
                 </div>
               </div>
+            </div>
+          </>
+        )}
+
+        {/* ============ SESSIONS SECTION ============ */}
+        {activeSection === 'sessions' && (
+          <>
+            <div className="mb-8">
+              <h2 className="text-3xl font-bold text-slate-900">My Sessions</h2>
+              <p className="text-slate-600 text-sm mt-2">All therapy sessions booked with your patients</p>
+            </div>
+
+            {loadingSessions ? (
+              <div className="flex justify-center py-16">
+                <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : practSessions.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-gray-100 p-16 text-center">
+                <p className="text-5xl mb-4">📭</p>
+                <p className="text-gray-500 font-medium">No sessions booked yet</p>
+                <p className="text-gray-400 text-sm mt-1">Set your availability to start receiving bookings</p>
+                <button
+                  onClick={() => setActiveSection('availability')}
+                  className="mt-4 px-5 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition"
+                >
+                  Set Availability
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+                {practSessions.map(session => (
+                  <SessionCard
+                    key={session.id}
+                    session={session}
+                    role="PRACTITIONER"
+                    onRefresh={async () => {
+                      if (practitionerProfile?.id) {
+                        const data = await getSessionsForPractitioner(practitionerProfile.id);
+                        setPractSessions(data);
+                      }
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ============ AVAILABILITY SECTION ============ */}
+        {activeSection === 'availability' && (
+          <>
+            <div className="mb-8">
+              <h2 className="text-3xl font-bold text-slate-900">Manage Availability</h2>
+              <p className="text-slate-600 text-sm mt-2">Set your weekly schedule so patients can book sessions</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              {DAYS.map((day) => (
+                <AvailabilityDayCard
+                  key={day}
+                  day={day}
+                  existing={availability.find(a => a.dayOfWeek === day) || {}}
+                  practitionerId={practitionerProfile?.id}
+                  onSaved={async () => {
+                    if (practitionerProfile?.id) {
+                      const updated = await getAvailability(practitionerProfile.id);
+                      setAvailabilityState(updated);
+                    }
+                  }}
+                />
+              ))}
             </div>
           </>
         )}

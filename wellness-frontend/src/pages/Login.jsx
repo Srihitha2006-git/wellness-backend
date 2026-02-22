@@ -7,7 +7,7 @@ import { loginUser, storeAuthData, getAccessToken, getStoredUser } from "../serv
 export default function Login() {
   const navigate = useNavigate();
   const [credentials, setCredentials] = useState({
-    email: "",
+    identifier: "",
     password: ""
   });
   const [error, setError] = useState("");
@@ -17,40 +17,21 @@ export default function Login() {
     e.preventDefault();
     setError("");
     setLoading(true);
-    
+
     try {
       const payload = {
-        email: credentials.email.trim(),
+        identifier: credentials.identifier.trim(),
         password: credentials.password,
       };
 
-      console.log("Sending login request:", payload);
+      // Call backend API using authService
+      const result = await loginUser(payload);
+      const data = result.data;
 
-      // Call backend API for login
-      const response = await fetch("http://localhost:8081/api/auth/login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
+      // Store auth data using centralized helper
+      storeAuthData(data);
 
-      console.log("Response status:", response.status);
-      const data = await response.json();
-      console.log("Response data:", data);
-
-      if (!response.ok) {
-        const errorData = data;
-        setError(errorData.message || "Invalid email or password");
-        setLoading(false);
-        return;
-      }
-
-      // Store user data and tokens
-      localStorage.setItem("user", JSON.stringify(data.user));
-      localStorage.setItem("accessToken", data.accessToken);
-      localStorage.setItem("refreshToken", data.refreshToken);
-      localStorage.setItem("userRole", data.user.role);
+      toast.success("Login successful!");
 
       // Role-based navigation
       if (data.user.role === "PRACTITIONER") {
@@ -69,33 +50,31 @@ export default function Login() {
 
           if (onboardingResponse.ok) {
             const onboardingStatus = await onboardingResponse.json();
-            console.log("Onboarding status:", onboardingStatus);
 
-            // If profile doesn't exist or not verified, go to onboarding
             if (!onboardingStatus.profileExists || !onboardingStatus.verified) {
               navigate("/practitioner/onboarding");
             } else {
-              // Profile exists and verified, go to dashboard
               navigate("/practitioner/dashboard");
             }
           } else {
-            // If status check fails, still go to dashboard (let them access)
             navigate("/practitioner/dashboard");
           }
         } catch (err) {
           console.error("Error checking onboarding status:", err);
-          // On error, default to dashboard
           navigate("/practitioner/dashboard");
         }
       } else if (data.user.role === "ADMIN") {
-        localStorage.setItem("adminLoggedIn", "true");
+        // Admin users are protected by RoleBasedRoute
+        // No localStorage flag needed - role is verified from JWT token on backend
         navigate("/admin/dashboard");
       } else {
         navigate("/user/dashboard");
       }
     } catch (err) {
       console.error("Login error:", err);
-      setError("Network error: " + err.message);
+      const errorMsg = err.response?.data?.message || err.message || "Login failed";
+      setError(errorMsg);
+      toast.error(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -162,13 +141,13 @@ export default function Login() {
 
             <div>
               <label className="block text-sm font-semibold text-gray-600 mb-2">
-                Email
+                Email or Phone Number
               </label>
               <input
-                type="email"
-                placeholder="example@email.com"
-                value={credentials.email}
-                onChange={(e) => setCredentials({ ...credentials, email: e.target.value })}
+                type="text"
+                placeholder="example@email.com or +91 9876543210"
+                value={credentials.identifier}
+                onChange={(e) => setCredentials({ ...credentials, identifier: e.target.value })}
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-600 transition"
                 required
               />
@@ -193,12 +172,12 @@ export default function Login() {
                 <input type="checkbox" />
                 Remember me
               </label>
-              <button
-                type="button"
+              <Link
+                to="/forgot-password"
                 className="text-teal-700 hover:underline"
               >
                 Forgot password?
-              </button>
+              </Link>
             </div>
 
             <button

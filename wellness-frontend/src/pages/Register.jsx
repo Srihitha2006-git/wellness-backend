@@ -9,6 +9,7 @@ export default function Register() {
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
+    phone: '',
     password: '',
     role: 'PATIENT'
   });
@@ -26,39 +27,22 @@ export default function Register() {
       const payload = {
         name: formData.fullName.trim(),
         email: formData.email.trim().toLowerCase(),
+        phone: formData.phone.trim(),
         password: formData.password,
         role: formData.role,
         bio: ""
       };
 
-      console.log("Sending registration request:", payload);
+      // Call backend API using authService
+      const result = await registerUser(payload);
+      const data = result.data;
 
-      // Call backend API for registration
-      const response = await fetch("http://localhost:8081/api/auth/register", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
+      // Store auth data using centralized helper
+      storeAuthData(data);
 
-      console.log("Response status:", response.status);
-      const data = await response.json();
-      console.log("Response data:", data);
+      toast.success("Registration successful!");
 
-      if (!response.ok) {
-        setError(data.message || "Registration failed. Please try again.");
-        setLoading(false);
-        return;
-      }
-
-      // Save registration info
-      localStorage.setItem('user', JSON.stringify(data.user));
-      localStorage.setItem('accessToken', data.accessToken);
-      localStorage.setItem('refreshToken', data.refreshToken);
-      localStorage.setItem('userRole', data.user.role);
-
-      // Navigate to login or role-specific page
+      // Navigate based on role
       if (data.user.role === "PRACTITIONER") {
         navigate("/practitioner/onboarding");
       } else {
@@ -68,7 +52,7 @@ export default function Register() {
       console.error("Registration error:", err);
       const errorMsg = err.response?.data?.message || err.message || "Registration failed";
       setError(errorMsg);
-      toast.error(errorMsg, { id: toastId });
+      toast.error(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -118,13 +102,12 @@ export default function Register() {
               <input
                 type="text"
                 placeholder="John Doe"
-                className={`w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:outline-none ${
-                  errors.fullName 
-                    ? 'border-red-500 focus:ring-red-500' 
-                    : 'focus:ring-[#1f6f66]'
-                }`}
+                className={`w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:outline-none ${errors.fullName
+                  ? 'border-red-500 focus:ring-red-500'
+                  : 'focus:ring-[#1f6f66]'
+                  }`}
                 value={formData.fullName}
-                onChange={(e) => setFormData({...formData, fullName: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
                 required
               />
               {errors.fullName && (
@@ -139,13 +122,12 @@ export default function Register() {
               <input
                 type="email"
                 placeholder="example@email.com"
-                className={`w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:outline-none ${
-                  errors.email 
-                    ? 'border-red-500 focus:ring-red-500' 
-                    : 'focus:ring-[#1f6f66]'
-                }`}
+                className={`w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:outline-none ${errors.email
+                  ? 'border-red-500 focus:ring-red-500'
+                  : 'focus:ring-[#1f6f66]'
+                  }`}
                 value={formData.email}
-                onChange={(e) => setFormData({...formData, email: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 required
               />
               {errors.email && (
@@ -155,18 +137,36 @@ export default function Register() {
 
             <div>
               <label className="text-xs font-semibold text-gray-600 tracking-wide">
+                PHONE NUMBER
+              </label>
+              <input
+                type="tel"
+                placeholder="+91 9876543210"
+                className={`w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:outline-none ${errors.phone
+                    ? 'border-red-500 focus:ring-red-500'
+                    : 'focus:ring-[#1f6f66]'
+                  }`}
+                value={formData.phone}
+                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                required
+              />
+              {errors.phone && (
+                <p className="text-red-500 text-xs mt-1">{errors.phone}</p>
+              )}
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-600 tracking-wide">
                 PASSWORD
               </label>
               <input
                 type="password"
                 placeholder="•••••••• (minimum 6 characters)"
-                className={`w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:outline-none ${
-                  errors.password 
-                    ? 'border-red-500 focus:ring-red-500' 
-                    : 'focus:ring-[#1f6f66]'
-                }`}
+                className={`w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:outline-none ${errors.password
+                  ? 'border-red-500 focus:ring-red-500'
+                  : 'focus:ring-[#1f6f66]'
+                  }`}
                 value={formData.password}
-                onChange={(e) => setFormData({...formData, password: e.target.value})}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                 required
               />
               {errors.password && (
@@ -174,7 +174,7 @@ export default function Register() {
               )}
               {!errors.password && formData.password && formData.password.length > 0 && (
                 <p className="text-gray-500 text-xs mt-1">
-                  {formData.password.length < 6 
+                  {formData.password.length < 6
                     ? `${6 - formData.password.length} more characters needed`
                     : '✓ Password length is valid'}
                 </p>

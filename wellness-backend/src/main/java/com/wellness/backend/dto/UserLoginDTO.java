@@ -1,27 +1,25 @@
 package com.wellness.backend.dto;
 
-import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 
 /**
  * DTO for user login request.
- * Accepts email and password for authentication.
+ * Accepts email OR phone number as identifier, plus password.
  */
 public class UserLoginDTO {
 
-    @Email(message = "Email must be valid")
-    @NotBlank(message = "Email is required")
-    private String email;
+    @NotBlank(message = "Email or phone number is required")
+    private String identifier; // can be email or phone
 
     @NotBlank(message = "Password is required")
     private String password;
 
-    public String getEmail() {
-        return email;
+    public String getIdentifier() {
+        return identifier;
     }
 
-    public void setEmail(String email) {
-        this.email = email;
+    public void setIdentifier(String identifier) {
+        this.identifier = identifier;
     }
 
     public String getPassword() {

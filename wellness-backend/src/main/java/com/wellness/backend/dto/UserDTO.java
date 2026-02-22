@@ -2,6 +2,7 @@ package com.wellness.backend.dto;
 
 import com.wellness.backend.model.User;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 public class UserDTO {
@@ -9,6 +10,9 @@ public class UserDTO {
     private String name;
     private String email;
     private String bio;
+    private String phone;
+    private LocalDate dateOfBirth;
+    private String address;
     private User.Role role;
     private LocalDateTime createdAt;
 
@@ -58,5 +62,29 @@ public class UserDTO {
 
     public void setCreatedAt(LocalDateTime createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public String getPhone() {
+        return phone;
+    }
+
+    public void setPhone(String phone) {
+        this.phone = phone;
+    }
+
+    public LocalDate getDateOfBirth() {
+        return dateOfBirth;
+    }
+
+    public void setDateOfBirth(LocalDate dateOfBirth) {
+        this.dateOfBirth = dateOfBirth;
+    }
+
+    public String getAddress() {
+        return address;
+    }
+
+    public void setAddress(String address) {
+        this.address = address;
     }
 }

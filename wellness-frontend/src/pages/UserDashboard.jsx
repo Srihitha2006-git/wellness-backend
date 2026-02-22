@@ -1,71 +1,174 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
+import { getCurrentUser, updateUser, getVerifiedPractitioners, createAppointmentRequest } from '../services/userService';
+import { getAccessToken } from '../services/authService';
+import { getSessionsForUser } from '../services/sessionService';
+import SessionCalendar from '../components/SessionCalendar';
+import BookingForm from '../components/BookingForm';
+import SessionCard from '../components/SessionCard';
 
 export default function UserDashboard() {
   const navigate = useNavigate();
   const [activeSection, setActiveSection] = useState('dashboard');
-  const [sessionFilter, setSessionFilter] = useState('all');
   const [orderFilter, setOrderFilter] = useState('all');
   const [userData, setUserData] = useState({
+    id: null,
     name: '',
     email: '',
     role: 'user',
     phone: '',
     dateOfBirth: '',
     address: '',
-    medicalHistory: '',
-    emergencyContact: ''
+    bio: ''
   });
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState(userData);
   const [phoneError, setPhoneError] = useState('');
   const [saveError, setSaveError] = useState('');
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [practitioners, setPractitioners] = useState([]);
+  const [loadingDoctors, setLoadingDoctors] = useState(false);
+  const [bookingPractitionerId, setBookingPractitionerId] = useState(null);
+  // Sessions state
+  const [sessions, setSessions] = useState([]);
+  const [loadingSessions, setLoadingSessions] = useState(false);
+  const [sessionFilter, setSessionFilter] = useState('all');
+  const [calendarPractitioner, setCalendarPractitioner] = useState(null); // { id, name }
+  const [selectedSlot, setSelectedSlot] = useState(null);
+  const [showBookingForm, setShowBookingForm] = useState(false);
+  const wsRef = useRef(null);
 
+  // Fetch user profile from backend API
   useEffect(() => {
-    // Fetch user data from localStorage
-    const users = JSON.parse(localStorage.getItem('mock_users')) || [];
-    const storedUser = JSON.parse(localStorage.getItem('user'));
-    
-    // Try to get user email from stored user object or from the backend response
-    let userEmail = null;
-    
-    if (storedUser && storedUser.email) {
-      userEmail = storedUser.email;
-    } else {
-      // Fallback: try to decode token if available
-      const token = localStorage.getItem('authToken');
-      if (token) {
-        const decodedToken = atob(token);
-        userEmail = decodedToken.split(':')[0];
-      }
-    }
-    
-    if (userEmail) {
-      // Find user by email in mock_users
-      let user = users.find(u => u.email === userEmail);
-      
-      // If not found in mock_users but we have storedUser, use storedUser data
-      if (!user && storedUser) {
-        user = storedUser;
-      }
-      
-      if (user) {
-        const userData = {
+    const fetchUserData = async () => {
+      try {
+        const token = getAccessToken();
+        if (!token) {
+          navigate('/login');
+          return;
+        }
+        const user = await getCurrentUser();
+        const data = {
+          id: user.id,
           name: user.name || '',
           email: user.email || '',
-          role: user.role || 'user',
+          role: user.role || 'PATIENT',
           phone: user.phone || '',
           dateOfBirth: user.dateOfBirth || '',
           address: user.address || '',
-          medicalHistory: user.medicalHistory || '',
-          emergencyContact: user.emergencyContact || ''
+          bio: user.bio || ''
         };
-        setUserData(userData);
-        setEditData(userData);
+        setUserData(data);
+        setEditData(data);
+      } catch (err) {
+        console.error('Error fetching user data:', err);
+        if (err.response?.status === 401 || err.response?.status === 403) {
+          navigate('/login');
+        }
       }
+    };
+    fetchUserData();
+  }, [navigate]);
+
+  // Fetch sessions when sessions section is opened
+  useEffect(() => {
+    if (activeSection === 'sessions' && userData.id) {
+      fetchSessions();
     }
-  }, []);
+  }, [activeSection, userData.id]);
+
+  const fetchSessions = async () => {
+    if (!userData.id) return;
+    setLoadingSessions(true);
+    try {
+      const data = await getSessionsForUser(userData.id);
+      setSessions(data);
+    } catch (err) {
+      console.error('Failed to fetch sessions:', err);
+    } finally {
+      setLoadingSessions(false);
+    }
+  };
+
+  // Fetch verified practitioners when Find Doctors section is active
+  useEffect(() => {
+    if (activeSection === 'find-doctors' && practitioners.length === 0) {
+      const fetchPractitioners = async () => {
+        setLoadingDoctors(true);
+        try {
+          const data = await getVerifiedPractitioners();
+          setPractitioners(data);
+        } catch (err) {
+          console.error('Error fetching practitioners:', err);
+          toast.error('Failed to load practitioners');
+        } finally {
+          setLoadingDoctors(false);
+        }
+      };
+      fetchPractitioners();
+    }
+  }, [activeSection]);
+
+  // Handle booking appointment
+  const handleBookAppointment = async (practitionerId) => {
+    setBookingPractitionerId(practitionerId);
+    try {
+      await createAppointmentRequest(practitionerId, {
+        description: 'Appointment request from patient dashboard',
+        priority: 'MEDIUM'
+      });
+      toast.success('Appointment request sent successfully!');
+    } catch (err) {
+      console.error('Error booking appointment:', err);
+      toast.error(err.response?.data?.message || 'Failed to book appointment');
+    } finally {
+      setBookingPractitionerId(null);
+    }
+  };
+
+  // Handle profile save
+  const handleSaveProfile = async () => {
+    if (editData.phone && editData.phone.length !== 10) {
+      setPhoneError('Phone number must be exactly 10 digits');
+      setSaveError('Please fix the errors before saving');
+      return;
+    }
+    try {
+      const updatePayload = {
+        name: editData.name,
+        bio: editData.bio,
+        phone: editData.phone || null,
+        dateOfBirth: editData.dateOfBirth || null,
+        address: editData.address || null
+      };
+      const updatedUser = await updateUser(userData.id, updatePayload);
+      const newData = {
+        id: updatedUser.id,
+        name: updatedUser.name || '',
+        email: updatedUser.email || '',
+        role: updatedUser.role || 'PATIENT',
+        phone: updatedUser.phone || '',
+        dateOfBirth: updatedUser.dateOfBirth || '',
+        address: updatedUser.address || '',
+        bio: updatedUser.bio || ''
+      };
+      setUserData(newData);
+      setEditData(newData);
+      setIsEditing(false);
+      setPhoneError('');
+      setSaveError('');
+      setSaveSuccess(true);
+      toast.success('Profile updated successfully!');
+      // Update localStorage for consistency
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (err) {
+      console.error('Error saving profile:', err);
+      setSaveError(err.response?.data?.message || 'Failed to save profile');
+      toast.error('Failed to save profile');
+    }
+  };
 
   return (
     <div className="flex min-h-screen bg-gray-50">
@@ -84,8 +187,8 @@ export default function UserDashboard() {
           <button
             onClick={() => setActiveSection('dashboard')}
             className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-all duration-200 ${activeSection === 'dashboard'
-                ? 'text-white bg-green-500/15 border-l-4 border-green-500'
-                : 'text-slate-300 hover:bg-white/5'
+              ? 'text-white bg-green-500/15 border-l-4 border-green-500'
+              : 'text-slate-300 hover:bg-white/5'
               }`}
           >
             <span>📊</span>
@@ -95,8 +198,8 @@ export default function UserDashboard() {
           <button
             onClick={() => setActiveSection('find-doctors')}
             className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-all duration-200 ${activeSection === 'find-doctors'
-                ? 'text-white bg-green-500/15 border-l-4 border-green-500'
-                : 'text-slate-300 hover:bg-white/5'
+              ? 'text-white bg-green-500/15 border-l-4 border-green-500'
+              : 'text-slate-300 hover:bg-white/5'
               }`}
           >
             <span>🔍</span>
@@ -106,8 +209,8 @@ export default function UserDashboard() {
           <button
             onClick={() => setActiveSection('sessions')}
             className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-all duration-200 ${activeSection === 'sessions'
-                ? 'text-white bg-green-500/15 border-l-4 border-green-500'
-                : 'text-slate-300 hover:bg-white/5'
+              ? 'text-white bg-green-500/15 border-l-4 border-green-500'
+              : 'text-slate-300 hover:bg-white/5'
               }`}
           >
             <span>📅</span>
@@ -117,8 +220,8 @@ export default function UserDashboard() {
           <button
             onClick={() => setActiveSection('orders')}
             className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-all duration-200 ${activeSection === 'orders'
-                ? 'text-white bg-green-500/15 border-l-4 border-green-500'
-                : 'text-slate-300 hover:bg-white/5'
+              ? 'text-white bg-green-500/15 border-l-4 border-green-500'
+              : 'text-slate-300 hover:bg-white/5'
               }`}
           >
             <span>🛍️</span>
@@ -128,8 +231,8 @@ export default function UserDashboard() {
           <button
             onClick={() => setActiveSection('wellness')}
             className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-all duration-200 ${activeSection === 'wellness'
-                ? 'text-white bg-green-500/15 border-l-4 border-green-500'
-                : 'text-slate-300 hover:bg-white/5'
+              ? 'text-white bg-green-500/15 border-l-4 border-green-500'
+              : 'text-slate-300 hover:bg-white/5'
               }`}
           >
             <span>💚</span>
@@ -139,8 +242,8 @@ export default function UserDashboard() {
           <button
             onClick={() => setActiveSection('messages')}
             className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-all duration-200 ${activeSection === 'messages'
-                ? 'text-white bg-green-500/15 border-l-4 border-green-500'
-                : 'text-slate-300 hover:bg-white/5'
+              ? 'text-white bg-green-500/15 border-l-4 border-green-500'
+              : 'text-slate-300 hover:bg-white/5'
               }`}
           >
             <span>💬</span>
@@ -150,8 +253,8 @@ export default function UserDashboard() {
           <button
             onClick={() => setActiveSection('profile')}
             className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-all duration-200 ${activeSection === 'profile'
-                ? 'text-white bg-green-500/15 border-l-4 border-green-500'
-                : 'text-slate-300 hover:bg-white/5'
+              ? 'text-white bg-green-500/15 border-l-4 border-green-500'
+              : 'text-slate-300 hover:bg-white/5'
               }`}
           >
             <span>👤</span>
@@ -161,8 +264,8 @@ export default function UserDashboard() {
           <button
             onClick={() => setActiveSection('settings')}
             className={`w-full flex items-center gap-3 px-6 py-3 text-left transition-all duration-200 ${activeSection === 'settings'
-                ? 'text-white bg-green-500/15 border-l-4 border-green-500'
-                : 'text-slate-300 hover:bg-white/5'
+              ? 'text-white bg-green-500/15 border-l-4 border-green-500'
+              : 'text-slate-300 hover:bg-white/5'
               }`}
           >
             <span>⚙️</span>
@@ -379,36 +482,43 @@ export default function UserDashboard() {
                 </div>
 
                 <div className="space-y-4 max-h-[600px] overflow-y-auto">
-                  {[
-                    { name: 'Dr. Rajesh Sharma', specs: ['Ayurveda', 'Herbalism'], rating: 4.8, distance: '2.5 km', price: 75, sessions: 150 },
-                    { name: 'Dr. Priya Patel', specs: ['Physiotherapy', 'Sports Medicine'], rating: 4.9, distance: '1.8 km', price: 65, sessions: 200 },
-                    { name: 'Dr. Anita Kumar', specs: ['Yoga', 'Meditation'], rating: 4.7, distance: '3.2 km', price: 50, sessions: 120 },
-                    { name: 'Dr. Vikram Singh', specs: ['Naturopathy', 'Diet & Nutrition'], rating: 4.6, distance: '4.0 km', price: 80, sessions: 95 },
-                  ].map((doctor, idx) => (
-                    <div key={idx} className="p-5 bg-slate-50 rounded-lg border border-slate-200 hover:bg-white hover:border-green-500 hover:shadow-md transition-all">
+                  {loadingDoctors ? (
+                    <div className="text-center py-12">
+                      <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-green-500 mx-auto mb-4"></div>
+                      <p className="text-slate-600">Loading practitioners...</p>
+                    </div>
+                  ) : practitioners.length === 0 ? (
+                    <div className="text-center py-12">
+                      <div className="text-5xl mb-4">🔍</div>
+                      <h4 className="text-lg font-semibold text-slate-900 mb-2">No practitioners found</h4>
+                      <p className="text-slate-600 text-sm">No verified practitioners are available at the moment</p>
+                    </div>
+                  ) : practitioners.map((doctor) => (
+                    <div key={doctor.id} className="p-5 bg-slate-50 rounded-lg border border-slate-200 hover:bg-white hover:border-green-500 hover:shadow-md transition-all">
                       <div className="flex gap-4 mb-4">
                         <div className="w-16 h-16 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center text-white font-semibold text-2xl flex-shrink-0">
-                          {doctor.name.split(' ').map(n => n[0]).join('')}
+                          {(doctor.userName || 'Dr').split(' ').map(n => n[0]).join('')}
                         </div>
                         <div className="flex-1">
-                          <h4 className="text-base font-semibold text-slate-900 mb-1">{doctor.name}</h4>
+                          <h4 className="text-base font-semibold text-slate-900 mb-1">{doctor.userName || 'Practitioner'}</h4>
                           <div className="flex gap-2 flex-wrap mb-2">
-                            {doctor.specs.map((spec, i) => (
-                              <span key={i} className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-semibold">
-                                {spec}
-                              </span>
-                            ))}
+                            <span className="px-3 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-semibold">
+                              {doctor.specialization || 'General'}
+                            </span>
                           </div>
                           <div className="flex gap-4 text-sm text-slate-600">
-                            <span className="flex items-center gap-1">⭐ {doctor.rating}</span>
-                            <span className="flex items-center gap-1">📍 {doctor.distance} away</span>
-                            <span className="flex items-center gap-1">💰 ${doctor.price}/session</span>
-                            <span className="flex items-center gap-1">👥 {doctor.sessions} sessions</span>
+                            <span className="flex items-center gap-1">⭐ {doctor.rating || 'N/A'}</span>
+                            <span className="flex items-center gap-1">🎓 {doctor.experience || 'N/A'}</span>
+                            {doctor.qualifications && <span className="flex items-center gap-1">📋 {doctor.qualifications}</span>}
                           </div>
                         </div>
                       </div>
-                      <button className="w-full py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg font-semibold hover:shadow-lg transition-all">
-                        Book Appointment
+                      <button
+                        onClick={() => handleBookAppointment(doctor.id)}
+                        disabled={bookingPractitionerId === doctor.id}
+                        className="w-full py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg font-semibold hover:shadow-lg transition-all disabled:opacity-50"
+                      >
+                        {bookingPractitionerId === doctor.id ? 'Sending Request...' : 'Book Appointment'}
                       </button>
                     </div>
                   ))}
@@ -435,8 +545,8 @@ export default function UserDashboard() {
                       key={filter}
                       onClick={() => setSessionFilter(filter.toLowerCase())}
                       className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${sessionFilter === filter.toLowerCase()
-                          ? 'bg-green-500 text-white'
-                          : 'bg-slate-100 text-slate-600 hover:bg-green-500 hover:text-white'
+                        ? 'bg-green-500 text-white'
+                        : 'bg-slate-100 text-slate-600 hover:bg-green-500 hover:text-white'
                         }`}
                     >
                       {filter}
@@ -463,8 +573,8 @@ export default function UserDashboard() {
                         </div>
                       </div>
                       <span className={`px-3 py-1 rounded-full text-xs font-semibold uppercase ${session.status === 'upcoming'
-                          ? 'bg-blue-100 text-blue-800'
-                          : 'bg-green-100 text-green-800'
+                        ? 'bg-blue-100 text-blue-800'
+                        : 'bg-green-100 text-green-800'
                         }`}>
                         {session.status}
                       </span>
@@ -509,8 +619,8 @@ export default function UserDashboard() {
                       key={filter}
                       onClick={() => setOrderFilter(filter.toLowerCase().replace(' ', '-'))}
                       className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${orderFilter === filter.toLowerCase().replace(' ', '-')
-                          ? 'bg-green-500 text-white'
-                          : 'bg-slate-100 text-slate-600 hover:bg-green-500 hover:text-white'
+                        ? 'bg-green-500 text-white'
+                        : 'bg-slate-100 text-slate-600 hover:bg-green-500 hover:text-white'
                         }`}
                     >
                       {filter}
@@ -529,8 +639,8 @@ export default function UserDashboard() {
                     <div className="flex justify-between items-center mb-4">
                       <span className="text-sm font-bold text-slate-900">{order.id}</span>
                       <span className={`px-3 py-1 rounded-full text-xs font-semibold uppercase ${order.status === 'in-transit'
-                          ? 'bg-blue-100 text-blue-800'
-                          : 'bg-green-100 text-green-800'
+                        ? 'bg-blue-100 text-blue-800'
+                        : 'bg-green-100 text-green-800'
                         }`}>
                         {order.status === 'in-transit' ? 'In Transit' : 'Delivered'}
                       </span>
@@ -548,8 +658,8 @@ export default function UserDashboard() {
                     <div className="flex justify-between items-center pt-4 border-t border-slate-200">
                       <span className="text-xl font-bold text-slate-900">${order.price}</span>
                       <button className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${order.status === 'in-transit'
-                          ? 'bg-indigo-600 text-white hover:bg-indigo-700'
-                          : 'bg-green-500 text-white hover:bg-green-600'
+                        ? 'bg-indigo-600 text-white hover:bg-indigo-700'
+                        : 'bg-green-500 text-white hover:bg-green-600'
                         }`}>
                         {order.status === 'in-transit' ? 'Track Order' : 'Reorder'}
                       </button>
@@ -735,12 +845,8 @@ export default function UserDashboard() {
                       <p className="text-lg text-slate-900 font-medium">{userData.address || 'Not provided'}</p>
                     </div>
                     <div className="border-t border-slate-200 pt-6">
-                      <h4 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-1">Medical History</h4>
-                      <p className="text-lg text-slate-900 font-medium">{userData.medicalHistory || 'Not provided'}</p>
-                    </div>
-                    <div className="border-t border-slate-200 pt-6">
-                      <h4 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-1">Emergency Contact</h4>
-                      <p className="text-lg text-slate-900 font-medium">{userData.emergencyContact || 'Not provided'}</p>
+                      <h4 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-1">Bio</h4>
+                      <p className="text-lg text-slate-900 font-medium">{userData.bio || 'Not provided'}</p>
                     </div>
                   </div>
                 ) : (
@@ -815,57 +921,17 @@ export default function UserDashboard() {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-2">Medical History</label>
+                      <label className="block text-sm font-semibold text-slate-700 mb-2">Bio</label>
                       <textarea
-                        value={editData.medicalHistory}
-                        onChange={(e) => setEditData({ ...editData, medicalHistory: e.target.value })}
+                        value={editData.bio}
+                        onChange={(e) => setEditData({ ...editData, bio: e.target.value })}
                         className="w-full px-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500 min-h-[80px] resize-none"
-                        placeholder="Enter any relevant medical history"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-slate-700 mb-2">Emergency Contact</label>
-                      <input
-                        type="text"
-                        value={editData.emergencyContact}
-                        onChange={(e) => setEditData({ ...editData, emergencyContact: e.target.value })}
-                        className="w-full px-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
-                        placeholder="Enter emergency contact name/number"
+                        placeholder="Tell us about yourself"
                       />
                     </div>
                     <div className="flex gap-3 pt-4 border-t border-slate-200">
                       <button
-                        onClick={() => {
-                          // Validate phone number
-                          if (editData.phone && editData.phone.length !== 10) {
-                            setPhoneError('Phone number must be exactly 10 digits');
-                            setSaveError('Please fix the errors before saving');
-                            return;
-                          }
-                          setUserData(editData);
-                          setIsEditing(false);
-                          setPhoneError('');
-                          setSaveError('');
-                          setSaveSuccess(true);
-                          
-                          // Save to localStorage - Update both "user" and "mock_users"
-                          const storedUser = JSON.parse(localStorage.getItem('user')) || {};
-                          const updatedUser = { ...storedUser, ...editData };
-                          localStorage.setItem('user', JSON.stringify(updatedUser));
-                          
-                          // Also update mock_users for compatibility
-                          const users = JSON.parse(localStorage.getItem('mock_users')) || [];
-                          const userIndex = users.findIndex(u => u.email === editData.email);
-                          if (userIndex !== -1) {
-                            users[userIndex] = { ...users[userIndex], ...editData };
-                          } else {
-                            users.push(editData);
-                          }
-                          localStorage.setItem('mock_users', JSON.stringify(users));
-                          
-                          // Clear success message after 3 seconds
-                          setTimeout(() => setSaveSuccess(false), 3000);
-                        }}
+                        onClick={handleSaveProfile}
                         className="flex-1 px-4 py-2.5 bg-green-500 text-white rounded-lg font-semibold hover:bg-green-600 transition-all"
                       >
                         Save Changes
@@ -938,6 +1004,84 @@ export default function UserDashboard() {
                 </div>
               </div>
             </div>
+          </>
+        )}
+
+        {/* ============ SESSIONS SECTION ============ */}
+        {activeSection === 'sessions' && (
+          <>
+            <div className="mb-8 flex justify-between items-center">
+              <div>
+                <h2 className="text-3xl font-bold text-slate-900">My Sessions</h2>
+                <p className="text-slate-600 text-sm mt-2">View and manage your therapy sessions</p>
+              </div>
+              <button
+                onClick={() => setActiveSection('find-doctors')}
+                className="px-5 py-2.5 bg-gradient-to-r from-teal-500 to-teal-600 text-white rounded-lg text-sm font-semibold hover:shadow-lg transition-all"
+              >
+                📅 Book New Session
+              </button>
+            </div>
+
+            {/* Filter Tabs */}
+            <div className="flex gap-2 mb-6">
+              {['all', 'upcoming', 'past', 'cancelled'].map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setSessionFilter(f)}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium capitalize transition-all ${sessionFilter === f
+                      ? 'bg-teal-600 text-white shadow-sm'
+                      : 'bg-white text-gray-600 border border-gray-200 hover:border-teal-300'
+                    }`}
+                >
+                  {f === 'all' ? '📋 All' : f === 'upcoming' ? '📅 Upcoming' : f === 'past' ? '✅ Past' : '❌ Cancelled'}
+                </button>
+              ))}
+            </div>
+
+            {/* Sessions Grid */}
+            {loadingSessions ? (
+              <div className="flex justify-center py-16">
+                <div className="w-10 h-10 border-4 border-teal-500 border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : (() => {
+              const today = new Date().toISOString().split('T')[0];
+              const filtered = sessions.filter(s => {
+                if (sessionFilter === 'upcoming') return s.sessionDate >= today && s.status === 'BOOKED';
+                if (sessionFilter === 'past') return s.sessionDate < today || s.status === 'COMPLETED';
+                if (sessionFilter === 'cancelled') return s.status === 'CANCELLED' || s.status === 'RESCHEDULED';
+                return true;
+              });
+              return filtered.length === 0 ? (
+                <div className="bg-white rounded-2xl border border-gray-100 p-16 text-center">
+                  <p className="text-5xl mb-4">📭</p>
+                  <p className="text-gray-500 font-medium">No sessions found</p>
+                  <p className="text-gray-400 text-sm mt-1">Book a session with a practitioner to get started</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+                  {filtered.map(session => (
+                    <SessionCard
+                      key={session.id}
+                      session={session}
+                      role="USER"
+                      onRefresh={fetchSessions}
+                    />
+                  ))}
+                </div>
+              );
+            })()}
+
+            {/* Booking Form Modal */}
+            {showBookingForm && selectedSlot && calendarPractitioner && (
+              <BookingForm
+                practitionerId={calendarPractitioner.id}
+                practitionerName={calendarPractitioner.name}
+                selectedSlot={selectedSlot}
+                onSuccess={fetchSessions}
+                onClose={() => { setShowBookingForm(false); setSelectedSlot(null); }}
+              />
+            )}
           </>
         )}
       </div>

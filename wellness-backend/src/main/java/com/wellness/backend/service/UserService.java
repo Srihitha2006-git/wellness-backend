@@ -68,6 +68,18 @@ public class UserService {
             targetUser.setBio(updateDTO.getBio());
         }
 
+        if (updateDTO.getPhone() != null) {
+            targetUser.setPhone(updateDTO.getPhone());
+        }
+
+        if (updateDTO.getDateOfBirth() != null) {
+            targetUser.setDateOfBirth(updateDTO.getDateOfBirth());
+        }
+
+        if (updateDTO.getAddress() != null) {
+            targetUser.setAddress(updateDTO.getAddress());
+        }
+
         return mapToDTO(userRepository.save(targetUser));
     }
 
@@ -123,6 +135,9 @@ public class UserService {
         dto.setName(user.getName());
         dto.setEmail(user.getEmail());
         dto.setBio(user.getBio());
+        dto.setPhone(user.getPhone());
+        dto.setDateOfBirth(user.getDateOfBirth());
+        dto.setAddress(user.getAddress());
         dto.setRole(user.getRole());
         dto.setCreatedAt(user.getCreatedAt());
         return dto;

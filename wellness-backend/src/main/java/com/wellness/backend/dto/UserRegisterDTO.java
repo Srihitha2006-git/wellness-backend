@@ -3,6 +3,7 @@ package com.wellness.backend.dto;
 import com.wellness.backend.model.User;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 public class UserRegisterDTO {
@@ -14,6 +15,10 @@ public class UserRegisterDTO {
     @Email(message = "Email must be valid")
     @NotBlank(message = "Email is required")
     private String email;
+
+    @NotBlank(message = "Phone number is required")
+    @Pattern(regexp = "^[+]?[0-9 \\-()]{7,20}$", message = "Phone number must be 7-20 digits, optionally starting with +")
+    private String phone;
 
     @NotBlank(message = "Password is required")
     @Size(min = 6, max = 100, message = "Password must be between 6 and 100 characters")
@@ -37,6 +42,14 @@ public class UserRegisterDTO {
 
     public void setEmail(String email) {
         this.email = email;
+    }
+
+    public String getPhone() {
+        return phone;
+    }
+
+    public void setPhone(String phone) {
+        this.phone = phone;
     }
 
     public String getPassword() {

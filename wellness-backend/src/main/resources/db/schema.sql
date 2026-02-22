@@ -14,6 +14,9 @@ CREATE TABLE users (
   password VARCHAR(255) NOT NULL,
   role ENUM('PATIENT','PRACTITIONER','ADMIN') NOT NULL,
   bio TEXT,
+  phone VARCHAR(20) UNIQUE,
+  date_of_birth DATE,
+  address TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
@@ -94,16 +97,44 @@ CREATE TABLE therapy_session (
   id INT NOT NULL AUTO_INCREMENT,
   practitioner_id INT NOT NULL,
   user_id INT NOT NULL,
-  session_date DATETIME NOT NULL,
-  status ENUM('booked','completed','cancelled') DEFAULT 'booked',
+  session_date DATE NOT NULL,
+  start_time TIME NOT NULL,
+  end_time TIME NOT NULL,
+  duration INT NOT NULL DEFAULT 60,
+  session_type ENUM('ONLINE','OFFLINE') DEFAULT 'ONLINE',
+  meeting_link VARCHAR(500),
+  status ENUM('BOOKED','CONFIRMED','COMPLETED','CANCELLED','RESCHEDULED') DEFAULT 'BOOKED',
+  payment_status ENUM('PENDING','PAID','REFUNDED') DEFAULT 'PENDING',
   notes TEXT,
+  cancellation_reason TEXT,
+  cancelled_by ENUM('USER','PRACTITIONER','ADMIN'),
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
-  UNIQUE KEY unique_practitioner_slot (practitioner_id, session_date),
   CONSTRAINT fk_session_practitioner
     FOREIGN KEY (practitioner_id) REFERENCES practitioner_profile(id)
     ON DELETE CASCADE,
   CONSTRAINT fk_session_user
     FOREIGN KEY (user_id) REFERENCES users(id)
+    ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+
+-- 6️⃣b PRACTITIONER AVAILABILITY
+
+DROP TABLE IF EXISTS practitioner_availability;
+CREATE TABLE practitioner_availability (
+  id INT NOT NULL AUTO_INCREMENT,
+  practitioner_id INT NOT NULL,
+  day_of_week ENUM('MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY','SUNDAY') NOT NULL,
+  start_time TIME NOT NULL,
+  end_time TIME NOT NULL,
+  slot_duration INT NOT NULL DEFAULT 60,
+  is_available TINYINT(1) DEFAULT 1,
+  PRIMARY KEY (id),
+  UNIQUE KEY unique_practitioner_day (practitioner_id, day_of_week),
+  CONSTRAINT fk_avail_practitioner
+    FOREIGN KEY (practitioner_id) REFERENCES practitioner_profile(id)
     ON DELETE CASCADE
 ) ENGINE=InnoDB;
 

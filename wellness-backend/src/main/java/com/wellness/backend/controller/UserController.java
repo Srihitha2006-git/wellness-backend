@@ -6,6 +6,7 @@ import com.wellness.backend.service.UserService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -20,18 +21,21 @@ public class UserController {
     }
 
     // ================= GET CURRENT USER =================
+    @PreAuthorize("hasAnyRole('PATIENT', 'PRACTITIONER', 'ADMIN')")
     @GetMapping("/me")
     public ResponseEntity<UserDTO> getCurrentUser() {
         return ResponseEntity.ok(userService.getCurrentUser());
     }
 
     // ================= GET USER BY ID =================
+    @PreAuthorize("hasAnyRole('PATIENT', 'PRACTITIONER', 'ADMIN')")
     @GetMapping("/{id}")
     public ResponseEntity<UserDTO> getUserById(@PathVariable Integer id) {
         return ResponseEntity.ok(userService.getUserById(id));
     }
 
     // ================= UPDATE USER =================
+    @PreAuthorize("hasAnyRole('PATIENT', 'PRACTITIONER', 'ADMIN')")
     @PutMapping("/{id}")
     public ResponseEntity<UserDTO> updateUser(
             @PathVariable Integer id,
@@ -41,6 +45,7 @@ public class UserController {
     }
 
     // ================= DELETE USER =================
+    @PreAuthorize("hasRole('ADMIN')")
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteUser(@PathVariable Integer id) {
         userService.deleteUser(id);
