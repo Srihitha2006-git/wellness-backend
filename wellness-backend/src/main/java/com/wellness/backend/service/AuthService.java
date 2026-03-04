@@ -20,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
+import java.util.Optional;
 
 /**
  * Service handling all authentication logic:
@@ -80,14 +81,9 @@ public class AuthService {
         // Save user
         User savedUser = userRepository.save(user);
 
-        // Create Practitioner Profile if role is PRACTITIONER
-        if (savedUser.getRole() == User.Role.PRACTITIONER) {
-            PractitionerProfile profile = new PractitionerProfile();
-            profile.setUser(savedUser);
-            profile.setVerified(false); // Default to false
-            profile.setSpecialization("General"); // Default or from DTO if available
-            practitionerProfileRepository.save(profile);
-        }
+        // Note: PractitionerProfile will be created during onboarding
+        // (POST /api/practitioners) when the practitioner submits their
+        // real specialization, qualifications, and experience data.
 
         // Send role-based registration email
         try {
@@ -140,12 +136,15 @@ public class AuthService {
 
         // Check Verification for Practitioners
         if (user.getRole() == User.Role.PRACTITIONER) {
-            PractitionerProfile profile = practitionerProfileRepository.findByUser_Id(user.getId())
-                    .orElseThrow(() -> new RuntimeException("Practitioner profile not found"));
+            Optional<PractitionerProfile> profileOpt = practitionerProfileRepository.findByUser_Id(user.getId());
 
-            if (!Boolean.TRUE.equals(profile.getVerified())) {
-                throw new RuntimeException("Your account is pending admin verification");
+            if (profileOpt.isPresent()) {
+                PractitionerProfile profile = profileOpt.get();
+                if (!Boolean.TRUE.equals(profile.getVerified())) {
+                    throw new RuntimeException("Your account is pending admin verification");
+                }
             }
+            // If no profile exists yet, allow login so practitioner can complete onboarding
         }
 
         // Generate JWT tokens using email and role

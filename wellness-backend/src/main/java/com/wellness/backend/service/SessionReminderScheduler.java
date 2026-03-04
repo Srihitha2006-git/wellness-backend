@@ -31,9 +31,9 @@ import java.util.List;
  * 2. Queries for sessions with status=BOOKED and reminderSent=false
  * 3. Filters sessions where startTime is between now and now+15 minutes
  * 4. For each qualifying session:
- *    - Sends WebSocket notification via SessionNotificationService
- *    - Marks reminderSent = true to prevent duplicates
- *    - Logs the action
+ * - Sends WebSocket notification via SessionNotificationService
+ * - Marks reminderSent = true to prevent duplicates
+ * - Logs the action
  * 5. Handles exceptions per session (continues processing others)
  * 6. Can be toggled on/off via property app.session.reminder.enabled
  */
@@ -51,7 +51,7 @@ public class SessionReminderScheduler {
     @Value("${app.session.reminder.enabled:true}")
     private boolean reminderEnabled;
 
-    @Value("${app.session.reminder.interval-minutes:15}")
+    @Value("${app.session.reminder.interval-minutes:30}")
     private int reminderIntervalMinutes;
 
     @Value("${app.session.reminder.one-hour-enabled:true}")
@@ -62,9 +62,9 @@ public class SessionReminderScheduler {
      * Runs every 60 seconds (configurable via fixedRate parameter)
      *
      * @Transactional ensures:
-     * - All operations on a session are atomic
-     * - If an error occurs, changes for that session are rolled back
-     * - No partial updates
+     *                - All operations on a session are atomic
+     *                - If an error occurs, changes for that session are rolled back
+     *                - No partial updates
      */
     @Scheduled(fixedRate = 60000) // Every 60 seconds = 1 minute
     @Transactional
@@ -81,9 +81,9 @@ public class SessionReminderScheduler {
             logger.debug("Checking for sessions needing reminders. Window: {} to {}",
                     now, reminderWindow);
 
-                // Query sessions that need reminders (repository expects LocalTime parameters)
-                List<TherapySession> sessionsNeedingReminder =
-                    therapySessionRepository.findSessionsForReminder(now.toLocalTime(), reminderWindow.toLocalTime());
+            // Query sessions that need reminders (repository expects LocalTime parameters)
+            List<TherapySession> sessionsNeedingReminder = therapySessionRepository
+                    .findSessionsForReminder(now.toLocalTime(), reminderWindow.toLocalTime());
 
             if (sessionsNeedingReminder.isEmpty()) {
                 logger.debug("No sessions found requiring {} minute reminder", reminderIntervalMinutes);
@@ -125,7 +125,8 @@ public class SessionReminderScheduler {
      * Scheduled task to send 1-hour session reminders (optional enhancement)
      * Runs every 60 seconds
      *
-     * This provides an earlier notification option for users who prefer more advance warning
+     * This provides an earlier notification option for users who prefer more
+     * advance warning
      */
     @Scheduled(fixedRate = 60000)
     @Transactional
@@ -144,8 +145,8 @@ public class SessionReminderScheduler {
             logger.debug("Checking for sessions needing 1-hour reminders. Window: {} to {}",
                     windowStart, windowEnd);
 
-                List<TherapySession> sessionsNeedingOneHourReminder =
-                    therapySessionRepository.findSessionsForOneHourReminder(windowStart.toLocalTime(), windowEnd.toLocalTime());
+            List<TherapySession> sessionsNeedingOneHourReminder = therapySessionRepository
+                    .findSessionsForOneHourReminder(windowStart.toLocalTime(), windowEnd.toLocalTime());
 
             if (sessionsNeedingOneHourReminder.isEmpty()) {
                 logger.debug("No sessions found requiring 1-hour reminder");
@@ -188,18 +189,18 @@ public class SessionReminderScheduler {
         Integer practitionerId = session.getPractitioner().getId();
         LocalDateTime sessionDateTime = LocalDateTime.of(
                 session.getSessionDate(),
-                session.getStartTime()
-        );
+                session.getStartTime());
 
         logger.debug("Sending {}-minute reminder for session ID: {} (DateTime: {})",
                 reminderIntervalMinutes, session.getId(), sessionDateTime);
 
         // Send WebSocket notification to user and practitioner
-        notificationService.notifySessionReminder(
+        notificationService.notifySessionReminder30Min(
                 userId,
+                session.getUser().getEmail(),
+                session.getUser().getName(),
                 practitionerId,
-                sessionDateTime
-        );
+                sessionDateTime);
 
         logger.debug("Notification sent for session ID: {}", session.getId());
 
@@ -222,8 +223,7 @@ public class SessionReminderScheduler {
         Integer practitionerId = session.getPractitioner().getId();
         LocalDateTime sessionDateTime = LocalDateTime.of(
                 session.getSessionDate(),
-                session.getStartTime()
-        );
+                session.getStartTime());
 
         logger.debug("Sending 1-hour reminder for session ID: {} (DateTime: {})",
                 session.getId(), sessionDateTime);
@@ -232,8 +232,7 @@ public class SessionReminderScheduler {
         notificationService.notifySessionReminder(
                 userId,
                 practitionerId,
-                sessionDateTime
-        );
+                sessionDateTime);
 
         logger.debug("1-hour notification sent for session ID: {}", session.getId());
 

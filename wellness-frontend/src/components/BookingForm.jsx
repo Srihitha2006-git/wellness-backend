@@ -19,9 +19,10 @@ export default function BookingForm({ practitionerId, practitionerName, selected
     const handleBook = async () => {
         setLoading(true);
         try {
+            const formattedDate = new Date(selectedSlot.date + "T00:00:00").toISOString().split("T")[0];
             await bookSession({
                 practitionerId,
-                sessionDate: selectedSlot.date,
+                sessionDate: formattedDate,
                 startTime: selectedSlot.time,
                 sessionType,
                 notes,

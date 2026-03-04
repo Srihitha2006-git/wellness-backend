@@ -116,7 +116,8 @@ CREATE TABLE therapy_session (
     ON DELETE CASCADE,
   CONSTRAINT fk_session_user
     FOREIGN KEY (user_id) REFERENCES users(id)
-    ON DELETE CASCADE
+    ON DELETE CASCADE,
+    UNIQUE KEY unique_practitioner_slot (practitioner_id, session_date, start_time)
 ) ENGINE=InnoDB;
 
 
@@ -156,21 +157,22 @@ CREATE TABLE recommendation (
 ) ENGINE=InnoDB;
 
 
--- 8️⃣ NOTIFICATION
+-- 8️⃣ NOTIFICATIONS
 
-DROP TABLE IF EXISTS notification;
-CREATE TABLE notification (
-  id INT NOT NULL AUTO_INCREMENT,
-  user_id INT NOT NULL,
-  type VARCHAR(100) NOT NULL,
+DROP TABLE IF EXISTS notifications;
+CREATE TABLE notifications (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  receiver_id BIGINT NOT NULL,
+  receiver_role VARCHAR(20) NOT NULL,
+  session_id BIGINT,
+  type VARCHAR(50) NOT NULL,
   message TEXT NOT NULL,
-  status ENUM('read','unread') DEFAULT 'unread',
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (id),
-  CONSTRAINT fk_notification_user
-    FOREIGN KEY (user_id) REFERENCES users(id)
-    ON DELETE CASCADE
+  is_read BOOLEAN DEFAULT FALSE,
+  email_sent BOOLEAN DEFAULT FALSE,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
+
+CREATE INDEX idx_receiver ON notifications (receiver_id, receiver_role);
 
 
 -- 9️⃣ ORDER ITEM
