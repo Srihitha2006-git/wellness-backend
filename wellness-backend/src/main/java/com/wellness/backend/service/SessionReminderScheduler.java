@@ -186,7 +186,7 @@ public class SessionReminderScheduler {
      */
     private void sendReminderForSession(TherapySession session) throws Exception {
         Integer userId = session.getUser().getId();
-        Integer practitionerId = session.getPractitioner().getId();
+        Integer practitionerUserId = session.getPractitioner().getUser().getId();
         LocalDateTime sessionDateTime = LocalDateTime.of(
                 session.getSessionDate(),
                 session.getStartTime());
@@ -199,7 +199,7 @@ public class SessionReminderScheduler {
                 userId,
                 session.getUser().getEmail(),
                 session.getUser().getName(),
-                practitionerId,
+                practitionerUserId,
                 sessionDateTime);
 
         logger.debug("Notification sent for session ID: {}", session.getId());
@@ -209,7 +209,7 @@ public class SessionReminderScheduler {
         therapySessionRepository.save(session);
 
         logger.info("Marked reminder as sent for session ID: {} (User: {}, Practitioner: {})",
-                session.getId(), userId, practitionerId);
+                session.getId(), userId, practitionerUserId);
     }
 
     /**
@@ -220,7 +220,7 @@ public class SessionReminderScheduler {
      */
     private void sendOneHourReminderForSession(TherapySession session) throws Exception {
         Integer userId = session.getUser().getId();
-        Integer practitionerId = session.getPractitioner().getId();
+        Integer practitionerUserId = session.getPractitioner().getUser().getId();
         LocalDateTime sessionDateTime = LocalDateTime.of(
                 session.getSessionDate(),
                 session.getStartTime());
@@ -231,7 +231,7 @@ public class SessionReminderScheduler {
         // Send notification
         notificationService.notifySessionReminder(
                 userId,
-                practitionerId,
+                practitionerUserId,
                 sessionDateTime);
 
         logger.debug("1-hour notification sent for session ID: {}", session.getId());

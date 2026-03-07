@@ -19,7 +19,7 @@ export default function BookingForm({ practitionerId, practitionerName, selected
     const handleBook = async () => {
         setLoading(true);
         try {
-            const formattedDate = new Date(selectedSlot.date + "T00:00:00").toISOString().split("T")[0];
+            const formattedDate = selectedSlot.date; // already YYYY-MM-DD, no UTC conversion needed
             await bookSession({
                 practitionerId,
                 sessionDate: formattedDate,

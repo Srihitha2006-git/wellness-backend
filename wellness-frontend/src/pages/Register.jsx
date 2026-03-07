@@ -1,8 +1,8 @@
 import { Link, useNavigate } from "react-router-dom";
-import { useState } from "react"; 
+import { useState } from "react";
 import toast from "react-hot-toast";
 
-import { registerUser, storeAuthData } from "../services/authService";
+import { registerUser } from "../services/authService";
 
 export default function Register() {
   const navigate = useNavigate();
@@ -34,38 +34,11 @@ export default function Register() {
       };
 
       const result = await registerUser(payload);
-      const data = result.data;
 
-      // 1. Store auth data using centralized helper
-      storeAuthData(data);
+      toast.success(result.data?.message || "Registration successful! Please verify your email.");
 
-      // 2. Normalize and save the role
-      const userRole = data.user?.role || data.role || formData.role;
-      localStorage.setItem('userRole', userRole);
-
-      // 3. MANDATORY ONBOARDING SYNC (The Fix)
-      // We manually ensure the user object has onboardingCompleted: false
-      // This prevents the RoleBasedRoute from letting them into the dashboard.
-      const userToStore = { 
-        ...(data.user || {}), 
-        role: userRole,
-        onboardingCompleted: userRole === 'PRACTITIONER' ? false : true 
-      };
-      localStorage.setItem("user", JSON.stringify(userToStore));
-      
-   if (userRole === "PRACTITIONER") {
-  localStorage.setItem("practitionerOnboarded", "false");
-
-      }
-
-      toast.success("Registration successful!");
-
-      // 4. ROLE-BASED NAVIGATION
-      if (userRole === "PRACTITIONER") {
-        navigate("/practitioner/onboarding");
-      } else {
-        navigate("/user/dashboard");
-      }
+      // Redirect to OTP verification page — no JWT issued yet
+      navigate("/verify-email", { state: { email: payload.email } });
 
     } catch (err) {
       console.error("Registration error:", err);
@@ -124,9 +97,8 @@ export default function Register() {
                 name="fullName"
                 type="text"
                 placeholder="John Doe"
-                className={`w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:outline-none ${
-                  errors.fullName ? 'border-red-500 focus:ring-red-500' : 'focus:ring-[#1f6f66]'
-                }`}
+                className={`w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:outline-none ${errors.fullName ? 'border-red-500 focus:ring-red-500' : 'focus:ring-[#1f6f66]'
+                  }`}
                 value={formData.fullName}
                 onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
                 required
@@ -143,9 +115,8 @@ export default function Register() {
                 name="email"
                 type="email"
                 placeholder="example@email.com"
-                className={`w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:outline-none ${
-                  errors.email ? 'border-red-500 focus:ring-red-500' : 'focus:ring-[#1f6f66]'
-                }`}
+                className={`w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:outline-none ${errors.email ? 'border-red-500 focus:ring-red-500' : 'focus:ring-[#1f6f66]'
+                  }`}
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 required
@@ -162,9 +133,8 @@ export default function Register() {
                 name="phone"
                 type="tel"
                 placeholder="+91 9876543210"
-                className={`w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:outline-none ${
-                  errors.phone ? 'border-red-500 focus:ring-red-500' : 'focus:ring-[#1f6f66]'
-                }`}
+                className={`w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:outline-none ${errors.phone ? 'border-red-500 focus:ring-red-500' : 'focus:ring-[#1f6f66]'
+                  }`}
                 value={formData.phone}
                 onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                 required
@@ -181,9 +151,8 @@ export default function Register() {
                 name="password"
                 type="password"
                 placeholder="••••••••"
-                className={`w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:outline-none ${
-                  errors.password ? 'border-red-500 focus:ring-red-500' : 'focus:ring-[#1f6f66]'
-                }`}
+                className={`w-full mt-2 px-4 py-3 border rounded-lg focus:ring-2 focus:outline-none ${errors.password ? 'border-red-500 focus:ring-red-500' : 'focus:ring-[#1f6f66]'
+                  }`}
                 value={formData.password}
                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                 required

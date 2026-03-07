@@ -13,6 +13,7 @@ CREATE TABLE users (
   email VARCHAR(150) NOT NULL,
   password VARCHAR(255) NOT NULL,
   role ENUM('PATIENT','PRACTITIONER','ADMIN') NOT NULL,
+  email_verified TINYINT(1) DEFAULT 0,
   bio TEXT,
   phone VARCHAR(20) UNIQUE,
   date_of_birth DATE,
@@ -21,6 +22,23 @@ CREATE TABLE users (
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   UNIQUE KEY email (email)
+) ENGINE=InnoDB;
+
+
+-- 1️⃣b EMAIL VERIFICATION OTP
+
+DROP TABLE IF EXISTS email_verification_otp;
+CREATE TABLE email_verification_otp (
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  email VARCHAR(150) NOT NULL,
+  otp_hash VARCHAR(255) NOT NULL,
+  expires_at DATETIME NOT NULL,
+  attempts INT NOT NULL DEFAULT 0,
+  max_attempts INT NOT NULL DEFAULT 5,
+  resend_available_at DATETIME,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  INDEX idx_otp_email (email)
 ) ENGINE=InnoDB;
 
 

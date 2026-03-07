@@ -14,6 +14,7 @@ import OrderHistory from "./pages/OrderHistory.jsx";
 import BrowseSessions from "./pages/BrowseSessions.jsx";
 import MyBookings from "./pages/MyBookings.jsx";
 import Unauthorized from "./pages/Unauthorized.jsx";
+import VerifyEmail from "./pages/VerifyEmail.jsx";
 import { AdminRoute, PractitionerRoute } from "./components/RoleBasedRoute.jsx";
 import { NotificationProvider } from "./context/NotificationContext.jsx";
 
@@ -32,6 +33,7 @@ function App() {
           <Route path="/register" element={<Register />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/verify-email" element={<VerifyEmail />} />
 
           {/* Error Routes */}
           <Route path="/unauthorized" element={<Unauthorized />} />

@@ -1,7 +1,7 @@
-import React, { createContext, useState, useContext, useEffect, useCallback } from "react";
+import React, { createContext, useState, useContext, useEffect, useCallback, useRef } from "react";
 import toast from "react-hot-toast";
 import { fetchNotifications, fetchUnreadCount, markAsRead as apiMarkAsRead } from "../services/notificationService";
-import { connectWebSocket, disconnectWebSocket } from "../services/websocketService";
+import { connectWebSocket, disconnectWebSocket, subscribeToPractitionerUpdates } from "../services/websocketService";
 
 const NotificationContext = createContext();
 
@@ -13,6 +13,8 @@ export const NotificationProvider = ({ children }) => {
     const [page, setPage] = useState(0);
     const [hasMore, setHasMore] = useState(true);
     const [loading, setLoading] = useState(false);
+    const isInitializingRef = useRef(false);       // guard: prevent concurrent initProvider calls
+    const seenNotificationIds = useRef(new Set()); // guard: deduplicate incoming WS messages
 
     const loadInitialData = useCallback(async () => {
         try {
@@ -63,6 +65,10 @@ export const NotificationProvider = ({ children }) => {
     };
 
     const handleIncomingNotification = useCallback((message) => {
+        // Deduplicate: ignore if we've already handled this notification ID
+        if (message.id && seenNotificationIds.current.has(message.id)) return;
+        if (message.id) seenNotificationIds.current.add(message.id);
+
         const isRead = message.isRead === true || message.isRead === "true";
 
         // Add to list avoiding duplicates
@@ -92,22 +98,34 @@ export const NotificationProvider = ({ children }) => {
 
     useEffect(() => {
         const initProvider = async () => {
-            const userStr = localStorage.getItem("user");
-            const token = localStorage.getItem("accessToken");
+            if (isInitializingRef.current) return; // prevent concurrent calls
+            isInitializingRef.current = true;
+            try {
+                const userStr = localStorage.getItem("user");
+                const token = localStorage.getItem("accessToken");
 
-            if (userStr && token) {
-                const user = JSON.parse(userStr);
-                await loadInitialData();
+                if (userStr && token) {
+                    const user = JSON.parse(userStr);
+                    await loadInitialData();
 
-                try {
-                    await connectWebSocket(user.id, (message) => {
-                        console.log("Context received WebSocket message:", message);
-                        // All notifications should pass through handleIncomingNotification
-                        handleIncomingNotification(message);
-                    });
-                } catch (error) {
-                    console.error("WebSocket connection failed in context:", error);
+                    try {
+                        await connectWebSocket(user.id, (message) => {
+                            console.log("Context received WebSocket message:", message);
+                            handleIncomingNotification(message);
+                        });
+                        // Also subscribe to practitioner topic for practitioners
+                        if (user.role === "PRACTITIONER") {
+                            subscribeToPractitionerUpdates(user.id, (message) => {
+                                console.log("Context received practitioner WebSocket message:", message);
+                                handleIncomingNotification(message);
+                            });
+                        }
+                    } catch (error) {
+                        console.error("WebSocket connection failed in context:", error);
+                    }
                 }
+            } finally {
+                isInitializingRef.current = false;
             }
         };
 
@@ -123,10 +141,21 @@ export const NotificationProvider = ({ children }) => {
             }
         };
 
+        const handleAuthChange = () => initProvider();
+        const handleAuthLogout = () => {
+            disconnectWebSocket();
+            setNotifications([]);
+            setUnreadCount(0);
+        };
+
         window.addEventListener("storage", handleStorageChange);
+        window.addEventListener("authChange", handleAuthChange);
+        window.addEventListener("authLogout", handleAuthLogout);
 
         return () => {
             window.removeEventListener("storage", handleStorageChange);
+            window.removeEventListener("authChange", handleAuthChange);
+            window.removeEventListener("authLogout", handleAuthLogout);
             disconnectWebSocket();
         };
     }, [loadInitialData, handleIncomingNotification]);

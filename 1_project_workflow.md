@@ -12,10 +12,10 @@ The Wellness Platform is a **Spring Boot + React** full-stack application that c
 |---|---|
 | Backend | Java 17, Spring Boot 3, Spring Security (JWT), Spring Data JPA |
 | Database | MySQL (`wellness_db`) |
-| Frontend | React 18 + Vite, React Router v6, Tailwind CSS |
+| Frontend | React 18 + Vite, React Router v6, Vanilla CSS |
 | Real-time | WebSocket (STOMP over SockJS) |
 | Email | Spring Mail (Gmail SMTP) |
-| Auth | JWT Access + Refresh Tokens |
+| Auth | JWT Access + Refresh Tokens + OTP Email Verification |
 | Scheduler | Spring `@Scheduled` |
 
 ---
@@ -25,7 +25,7 @@ The Wellness Platform is a **Spring Boot + React** full-stack application that c
 ```
 wellness-frontend (React/Vite :5173)
         │
-        │ HTTP REST + WebSocket
+        │ HTTP REST + WebSocket (STOMP/SockJS)
         ▼
 wellness-backend (Spring Boot :8081)
         │
@@ -40,40 +40,44 @@ wellness-backend (Spring Boot :8081)
 
 | # | Table | Purpose |
 |---|---|---|
-| 1 | `users` | Stores all users (PATIENT, PRACTITIONER, ADMIN roles) |
-| 2 | `practitioner_profile` | Extended profile linked to PRACTITIONER user |
-| 3 | `practitioner_availability` | Weekly schedule slots per practitioner |
-| 4 | `practitioner_request` | Patient-to-practitioner consultation requests |
-| 5 | `therapy_session` | Booked/confirmed/cancelled sessions |
-| 6 | `notifications` | System-generated in-app notifications |
-| 7 | `product` | Wellness products for marketplace |
-| 8 | `orders` | Customer orders |
-| 9 | `order_item` | Line items within an order |
-| 10 | `review` | Post-session reviews (schema only, no API yet) |
-| 11 | `question` | Q&A from users (schema only, no API yet) |
-| 12 | `answer` | Practitioner answers to questions (schema only, no API yet) |
+| 1 | `users` | Stores all users (PATIENT, PRACTITIONER, ADMIN roles) with `email_verified` flag |
+| 2 | `email_verification_otp` | 6-digit OTP records for email verification (expires in 5 min, max 5 attempts) |
+| 3 | `password_reset_token` | One-time tokens for forgot-password flow (expires in 30 min) |
+| 4 | `practitioner_profile` | Extended profile linked to PRACTITIONER user |
+| 5 | `practitioner_availability` | Weekly schedule slots per practitioner |
+| 6 | `practitioner_request` | Patient-to-practitioner consultation requests |
+| 7 | `therapy_session` | Booked/confirmed/cancelled sessions with `reminder_sent` + `one_hour_reminder_sent` flags |
+| 8 | `notifications` | System-generated in-app notifications (stored by user ID, receiver role) |
+| 9 | `product` | Wellness products for marketplace |
+| 10 | `orders` | Customer orders |
+| 11 | `order_item` | Line items within an order |
+| 12 | `review` | Post-session reviews (schema only, no API yet) |
+| 13 | `question` | Q&A from users (schema only, no API yet) |
+| 14 | `answer` | Practitioner answers to questions (schema only, no API yet) |
 
 ---
 
 ## Development Workflow (Done in This Order)
 
 ```
-1.  Database Schema Design (schema.sql - 12 tables)
+1.  Database Schema Design (schema.sql - 14 tables)
 2.  Backend Models + Repos (JPA Entities & Repositories)
 3.  Auth System (JWT Register/Login/Refresh, Forgot & Reset Password)
-4.  Practitioner Module (Profile CRUD, Verification, Document Upload)
-5.  Availability Module (Weekly Slot Setup)
-6.  Therapy Session Module (Book / Cancel / Reschedule, Slot calculation)
-7.  Practitioner Request Module (Patient sends request, Practitioner accepts/rejects)
-8.  Product Marketplace (Product CRUD, Categories, Search & Filter)
-9.  Orders + Cart (Create Order, History, Cancel, Pay, Status Update)
-10. Email Service (Booking confirmations, Reminders via Gmail SMTP)
-11. WebSocket / Real-time (SockJS + STOMP subscriptions)
-12. Notification System (In-app notifications, Automatic cleanup)
-13. Session Reminder Scheduler (30-min and 1-hour auto-reminders)
-14. Admin Dashboard (User mgmt, Practitioner verify, Order management)
-15. Frontend Pages & Routing (All pages + React Router v6)
-16. Bug Fixes (Booking 500 errors, Enum fixes, 403 Notification errors fixed)
+4.  OTP Email Verification (register → verify OTP → auto-login)
+5.  Practitioner Module (Profile CRUD, Verification, Document Upload)
+6.  Availability Module (Weekly Slot Setup)
+7.  Therapy Session Module (Book / Cancel / Reschedule, Slot calculation)
+8.  Practitioner Request Module (Patient sends request, Practitioner accepts/rejects)
+9.  Product Marketplace (Product CRUD, Categories, Search & Filter)
+10. Orders + Cart (Create Order, History, Cancel, Pay, Status Update)
+11. Email Service (OTP verification, booking confirmations, reminders)
+12. WebSocket / Real-time (SockJS + STOMP subscriptions)
+13. Notification System (In-app notifications, Automatic cleanup, practitioner fix)
+14. Session Reminder Scheduler (30-min and 1-hour auto-reminders)
+15. Admin Dashboard (User mgmt, Practitioner verify, Order management)
+16. Frontend Pages & Routing (All pages + React Router v6)
+17. Bug Fixes (Booking 500 errors, 403 Notification errors, duplicate WebSocket subscriptions,
+    OTP redirect, same-tab auth change event, practitioner notification ID mismatch)
 ```
 
 ---
@@ -81,33 +85,34 @@ wellness-backend (Spring Boot :8081)
 ## User Journey Flows
 
 ### 🧑‍💼 Patient Journey
-1. **Register** → `POST /api/auth/register` (role: PATIENT)
-2. **Login** → `POST /api/auth/login` → receives JWT tokens
+1. **Register** → `POST /api/auth/register` (role: PATIENT) → receives OTP email
+2. **Verify Email** → `/verify-email` page → `POST /api/auth/verify-email` → auto-login with JWT
 3. **Browse Practitioners** → `GET /api/practitioners/verified`
 4. **Check Availability** → `GET /api/availability/{practitionerId}`
 5. **See Available Slots** → `GET /api/sessions/{practitionerId}/slots?date=YYYY-MM-DD`
-6. **Book Session** → `POST /api/sessions/book`
-7. **Get Confirmation Email** → Spring Mail sends booking confirmation
-8. **View My Bookings** → `GET /api/sessions/user/{userId}`
-9. **Cancel/Reschedule** → `PUT /api/sessions/{id}/cancel` or `/reschedule`
-10. **Browse Products** → `GET /api/products/available`
-11. **Add to Cart** → localStorage cart management
-12. **Checkout** → `POST /api/orders`
-13. **View Order History** → `GET /api/orders/history`
-14. **Receive Notifications** → WebSocket + in-app bell
+6. **Book Session** → `POST /api/sessions/book` → in-app notification fires immediately
+7. **View My Bookings** → `GET /api/sessions/user/{userId}`
+8. **Cancel/Reschedule** → `PUT /api/sessions/{id}/cancel` or `/reschedule` → notification fires
+9. **Browse Products** → `GET /api/products/available`
+10. **Add to Cart** → localStorage cart management
+11. **Checkout** → `POST /api/orders`
+12. **View Order History** → `GET /api/orders/history`
+13. **Receive Notifications** → WebSocket real-time + in-app bell badge (deduped)
 
 ### 🧑‍⚕️ Practitioner Journey
-1. **Register** → `POST /api/auth/register` (role: PRACTITIONER)
-2. **Onboard** → `/practitioner/onboarding` → create profile, upload documents
-3. **Set Availability** → `POST /api/availability/{practitionerId}`
-4. **Wait for Admin Verification** → Admin calls `PUT /api/practitioners/{id}/verify`
-5. **View Dashboard** → `/practitioner/dashboard`
-6. **See Upcoming Sessions** → `GET /api/sessions/practitioner/{practitionerId}`
-7. **Handle Patient Requests** → Accept/Reject via `PUT /api/practitioners/requests/{id}/accept`
-8. **Receive Reminders** → Scheduler sends 30-min and 1-hour WebSocket notifications
+1. **Register** → `POST /api/auth/register` (role: PRACTITIONER) → OTP email sent
+2. **Verify Email** → OTP → auto-login
+3. **Onboard** → `/practitioner/onboarding` → create profile, upload documents
+4. **Set Availability** → `POST /api/availability/{practitionerId}`
+5. **Wait for Admin Verification** → Admin calls `PUT /api/practitioners/{id}/verify`
+6. **Login** → JWT issued, WebSocket connects and subscribes to `/topic/practitioner/{userId}`
+7. **View Dashboard** → `/practitioner/dashboard` with real-time notification bell
+8. **See Upcoming Sessions** → `GET /api/sessions/practitioner/{practitionerId}`
+9. **Handle Patient Requests** → Accept/Reject via `PUT /api/practitioners/requests/{id}/accept`
+10. **Receive Notifications** → Session booked/cancelled by patients, 30-min + 1-hour reminders
 
 ### 🛠️ Admin Journey
-1. **Login** (hardcoded admin or admin role in DB)
+1. **Login** (hardcoded admin or admin role in DB) — exempt from OTP verification
 2. **View Admin Dashboard** → `/admin/dashboard`
 3. **Verify Practitioners** → `PUT /api/practitioners/{id}/verify?verified=true`
 4. **Manage Users** → View all users

@@ -5,29 +5,38 @@
 ## Feature 1: Authentication & User Management
 
 ### What it does
-Full JWT-based auth with register, login, session refresh, and secure password reset.
+Full JWT-based auth with register, OTP email verification, login, session refresh, and secure password reset.
 
 ### How it works
 
 **Backend:**
 - `AuthController` → `/api/auth/**`
-- `AuthService` handles BCrypt password hashing, JWT generation (access + refresh tokens)
+- `AuthService` handles BCrypt password hashing, JWT generation (access + refresh tokens), OTP generation and verification
 - `JwtAuthenticationFilter` intercepts every request and validates the Bearer token
 - `PasswordResetToken` model stores one-time tokens for forgotten passwords
+- `EmailVerificationOtp` model stores 6-digit OTP hash (BCrypt), expiry, attempt count, resend cooldown
 
 | Endpoint | Method | Description |
 |---|---|---|
-| `/api/auth/register` | POST | Creates new user (PATIENT, PRACTITIONER, ADMIN roles) |
-| `/api/auth/login` | POST | Returns `accessToken` + `refreshToken` + `user` |
+| `/api/auth/register` | POST | Creates new user → sends OTP email; does NOT return tokens yet |
+| `/api/auth/verify-email` | POST | Validates OTP → marks email verified → returns JWT tokens (auto-login) |
+| `/api/auth/resend-otp` | POST | Sends new OTP (60 s cooldown, generic message for security) |
+| `/api/auth/login` | POST | Returns `accessToken` + `refreshToken` + `user` (blocked if email unverified) |
 | `/api/auth/refresh` | POST | Issues new access token using refresh token |
 | `/api/auth/forgot-password` | POST | Sends reset link to email (generic message for security) |
 | `/api/auth/reset-password` | POST | Validates token + sets new BCrypt-hashed password |
 
+**OTP Rules:**
+- Expires in **5 minutes**
+- Maximum **5 wrong attempts** before lockout
+- Resend cooldown: **60 seconds**
+- Admin users are **exempt** from email verification
+
 **Frontend:**
-- `Login.jsx`, `Register.jsx`, `ForgotPassword.jsx`, `ResetPassword.jsx`
-- `authService.js` handles all HTTP calls
-- `localStorage` stores `accessToken`, `refreshToken`, `user`, `userRole`
-- `jwtService.js` decodes and checks token expiry
+- `Register.jsx` → submits form → redirects to `VerifyEmail.jsx`
+- `VerifyEmail.jsx` → OTP input + resend → on success, stores auth data and navigates directly to role-based dashboard
+- `Login.jsx`, `ForgotPassword.jsx`, `ResetPassword.jsx`
+- `authService.js` — all HTTP calls + `storeAuthData()` dispatches `window.dispatchEvent(new Event('authChange'))` to trigger same-tab notification init
 
 ---
 
@@ -48,7 +57,7 @@ Practitioners create and manage their professional profiles. Admins verify them.
 | `GET /api/practitioners` | GET | Public | All practitioners |
 | `GET /api/practitioners/verified` | GET | Public | Only verified practitioners |
 | `GET /api/practitioners/{id}` | GET | Public | Get one practitioner |
-| `POST /api/practitioners` | POST | PRACTITIONER | Create profile |
+| `POST /api/practitioners` | POST | Authenticated | Create profile |
 | `PUT /api/practitioners/{id}` | PUT | PRACTITIONER | Update profile |
 | `PUT /api/practitioners/{id}/verify` | PUT | ADMIN | Toggle verified flag |
 | `GET /api/practitioners/search?specialization=` | GET | Public | Filter by specialization |
@@ -91,14 +100,14 @@ Practitioners define their weekly schedule (day, start time, end time, slot dura
 ## Feature 4: Therapy Session Booking
 
 ### What it does
-Patients book time slots with practitioners. Sessions can be cancelled or rescheduled. The system prevents double-booking via a unique DB constraint.
+Patients book time slots with practitioners. Sessions can be cancelled or rescheduled. Double-booking is prevented for both patient and practitioner.
 
 ### How it works
 
 **Backend:**
 - `TherapySessionController` → `/api/sessions/**`
-- `TherapySessionService` calculates available slots using availability + existing bookings, creates session, sends confirmation notification
-- `TherapySession` model: status (`BOOKED`, `CONFIRMED`, `COMPLETED`, `CANCELLED`, `RESCHEDULED`), type (`ONLINE`/`OFFLINE`), payment status, notes, cancellation reason
+- `TherapySessionService` calculates available slots, creates session, fires notifications using **practitioner's user ID** (not profile ID) to ensure correct `receiverId` in notifications
+- `TherapySession` model: status (`BOOKED`, `CONFIRMED`, `COMPLETED`, `CANCELLED`, `RESCHEDULED`), type (`ONLINE`/`OFFLINE`), payment status, notes, cancellation reason, `reminderSent`, `oneHourReminderSent` flags
 
 | Endpoint | Method | Description |
 |---|---|---|
@@ -109,11 +118,9 @@ Patients book time slots with practitioners. Sessions can be cancelled or resche
 | `GET /api/sessions/practitioner/{id}` | GET | All sessions for a practitioner |
 | `GET /api/sessions/{id}/slots?date=` | GET | Free slots on a given date |
 
-**Slot Calculation Logic:**
-1. Load practitioner's `PractitionerAvailability` for that day-of-week
-2. Generate all possible slots (start → end, stepping by slot duration)
-3. Remove slots already booked in `therapy_session` table
-4. Return remaining free slots
+**Overlap / Double-booking Prevention:**
+- Practitioner overlap check: no two BOOKED sessions can overlap in time
+- User overlap check: same patient cannot have two sessions at the same time
 
 **Frontend:**
 - `BookingForm.jsx` — takes practitioner + date + slot
@@ -156,7 +163,7 @@ Patients send consultation requests to practitioners before booking. Practitione
 ## Feature 6: Product Marketplace
 
 ### What it does
-An online store where patients can browse wellness/medicine products, filter by category, search, add to cart, and place orders.
+An online store where patients can browse wellness products, filter by category, search, add to cart, and place orders.
 
 ### How it works
 
@@ -188,29 +195,40 @@ An online store where patients can browse wellness/medicine products, filter by 
 
 ---
 
-## Feature 7: Real-time Notifications (In-App)
+## Feature 7: Real-time In-App Notifications
 
 ### What it does
-Users and practitioners receive in-app notifications for session events: booking confirmed, cancelled, rescheduled, reminder. Unread count badge updates live.
+Users and practitioners receive in-app notifications for session events: booking confirmed, cancelled, rescheduled, reminders. Unread count badge updates in real-time via WebSocket. Notifications persist in DB and are loaded on login.
 
 ### How it works
 
 **Backend:**
 - `NotificationController` → `/api/notifications/**`
-- `SessionNotificationService` creates `Notification` records and pushes WebSocket messages
-- `Notification` model: `receiverId`, `receiverRole` (USER/PRACTITIONER), `sessionId`, `type`, `message`, `isRead`, `emailSent`
-- `NotificationCleanupService` — `@Scheduled` task cleans old (read) notifications
+- `SessionNotificationService` creates `Notification` DB records and pushes WebSocket messages
+- `Notification` model: `receiverId` (**= user ID**, not profile ID), `receiverRole` (USER/PRACTITIONER), `sessionId`, `type`, `message`, `isRead`, `emailSent`
+- `NotificationCleanupService` — `@Scheduled` task cleans old read notifications
 
 | Endpoint | Description |
 |---|---|
 | `GET /api/notifications?page=&size=` | Paginated notifications for logged-in user |
 | `GET /api/notifications/unread-count` | Count of unread notifications |
-| `PUT /api/notifications/{id}/read` | Mark one as read |
+| `PUT /api/notifications/{id}/read` | Mark one as read (ownership verified) |
+
+**WebSocket Topics:**
+| Topic | Who receives |
+|---|---|
+| `/topic/user/{userId}` | Patient — all session/order events |
+| `/topic/practitioner/{userId}` | Practitioner — session booked/cancelled/reminders |
+| `/topic/sessions/{userId}` | Session updates |
+| `/topic/orders/{userId}` | Order status changes |
 
 **Frontend:**
-- `NotificationContext.jsx` — global React context that polls `unreadCount` on an interval
-- `NotificationDropdown.jsx` — bell icon in navbar, shows list of notifications with mark-as-read
-- `notificationService.js` — fetches and marks notifications
+- `NotificationContext.jsx` — global React context; connects WebSocket on login, fetches DB notifications, deduplicates by message ID (prevents double unread count from duplicate subscriptions)
+- `NotificationDropdown.jsx` — bell 🔔 icon in navbar with unread badge, paginated list, click-to-mark-as-read, infinite scroll
+- `notificationService.js` — fetches and marks notifications via axios (JWT attached via interceptor)
+- `websocketService.js` — STOMP client with `isConnecting` guard to prevent concurrent connection race conditions
+
+**Key fix applied:** `receiverId` in DB is stored as `user.id` (not `practitioner_profile.id`) so the `NotificationController` can query correctly using `currentUser.getId()`.
 
 ---
 
@@ -223,39 +241,41 @@ Provides real-time push updates to patients and practitioners for session change
 
 **Backend:**
 - `WebSocketController` handles STOMP `/app/` message mappings
-- `SimpMessagingTemplate` pushes to user-specific queues
+- `SimpMessagingTemplate` pushes to topic queues
 
-| STOMP Endpoint | Action |
+| STOMP Topic | Who/When |
 |---|---|
-| `/app/session/subscribe` | Subscribe to session updates for a userId |
-| `/app/notifications/subscribe` | Subscribe to notification updates |
-| `/app/orders/subscribe` | Subscribe to order updates |
-| `/app/availability/subscribe` | Subscribe to availability updates |
-| `/app/ping` → `/topic/pong` | Heartbeat keep-alive |
+| `/topic/user/{userId}` | Patient — on booking, cancellation, reschedule, order events |
+| `/topic/practitioner/{userId}` | Practitioner — on booking by patient, cancellation, reminders |
+| `/topic/sessions/{userId}` | Session updates |
+| `/topic/orders/{userId}` | Order updates |
 
-**Frontend:**
-- `websocketService.js` — manages STOMP client connection lifecycle: connect, subscribe, disconnect, reconnect on drop
+**Frontend (`websocketService.js`):**
+- `isConnecting` flag prevents concurrent connection attempts (race condition fix)
+- Single STOMP client shared across subscriptions
+- `disconnectWebSocket()` unsubscribes all topics and resets flags
+- Practitioners auto-subscribe to `/topic/practitioner/{userId}` in `NotificationContext` after login
 
 ---
 
 ## Feature 9: Email Notifications
 
 ### What it does
-Sends transactional emails to users and practitioners for booking confirmation, cancellation, rescheduling, and reminders.
+Sends transactional emails to users and practitioners for OTP verification, booking confirmation, cancellation, rescheduling, and reminders.
 
 ### How it works
 
 **Backend:**
 - `EmailService` — Spring `JavaMailSender` connected to Gmail SMTP
-- Called by `TherapySessionService`, `SessionNotificationService`, `SessionReminderScheduler`
-- Sends HTML-formatted emails with session details
+- Called by `AuthService`, `TherapySessionService`, `SessionNotificationService`, `SessionReminderScheduler`
 
 Email types implemented:
+- **OTP verification** (sent on register and resend-OTP)
 - Booking confirmation (to both user and practitioner)
 - Session cancellation
 - Session rescheduled
-- 30-minute reminder
-- 1-hour reminder
+- **30-minute reminder** (with email + in-app notification)
+- **1-hour reminder** (in-app notification only)
 
 ---
 
@@ -267,11 +287,10 @@ Automatically monitors upcoming sessions and sends push + email reminders at 30 
 ### How it works
 
 **Backend:**
-- `SessionReminderScheduler` — `@Scheduled(fixedRate = 60000)` runs every 60 seconds
-- Queries DB for sessions with `status=BOOKED` and `reminderSent=false` within the next 30-minute window
-- Calls `SessionNotificationService.notifySessionReminder30Min()` → saves DB notification + pushes WebSocket
-- Sets `reminderSent=true` on the session to prevent duplicates
-- A second scheduler handles 1-hour reminders with `oneHourReminderSent` flag
+- `SessionReminderScheduler` — two `@Scheduled(fixedRate = 60000)` jobs run every 60 seconds
+- Queries DB for sessions with `status=BOOKED` and `reminderSent=false` and `sessionDate=CURRENT_DATE` within the next 30-minute window
+- Notifications are sent to **practitioner's user ID** (fixed from profile ID mismatch)
+- Sets `reminderSent=true` (30-min) or `oneHourReminderSent=true` (1-hour) to prevent duplicates
 
 Config via `application.properties`:
 ```
@@ -291,7 +310,7 @@ Three roles (PATIENT, PRACTITIONER, ADMIN) with different access rights enforced
 
 **Backend:**
 - `SecurityConfig` — `@EnableMethodSecurity` + `authorizeHttpRequests()` rules
-- Public: auth endpoints, GET practitioners/verified, GET availability
+- Public: auth endpoints, GET practitioners/verified, GET availability, WebSocket (`/ws/**`)
 - Authenticated: sessions, notifications
 - PRACTITIONER only: profile creation, document upload, availability setup
 - ADMIN only: verify practitioner, update order status, manage all requests

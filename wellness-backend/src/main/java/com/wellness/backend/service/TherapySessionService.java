@@ -99,7 +99,7 @@ public class TherapySessionService {
 
         notificationService.notifySessionBooked(
                 user.getId(),
-                practitioner.getId(),
+                practitioner.getUser().getId(),
                 practitioner.getUser().getName(),
                 java.time.LocalDateTime.of(dto.getSessionDate(), dto.getStartTime()));
 
@@ -128,7 +128,7 @@ public class TherapySessionService {
 
         notificationService.notifySessionCancelled(
                 session.getUser().getId(),
-                session.getPractitioner().getId(),
+                session.getPractitioner().getUser().getId(),
                 reason);
 
         return mapToDTO(sessionRepository.save(session));
@@ -189,7 +189,7 @@ public class TherapySessionService {
 
         notificationService.notifySessionRescheduled(
                 oldSession.getUser().getId(),
-                oldSession.getPractitioner().getId(),
+                oldSession.getPractitioner().getUser().getId(),
                 java.time.LocalDateTime.of(dto.getNewSessionDate(), dto.getNewStartTime()));
 
         return mapToDTO(saved);
